@@ -1,8 +1,45 @@
+let num_factors (_n : int) : int =
+    let rec counter n d count =
+        if d * d > n then
+            if n > 1 then count + 1 else count
+        else if n mod d = 0 then
+            counter (n/d) d (count + 1)
+        else
+            counter n (d + 1) count
+        in
+        counter _n 2 0;;
 
-let num_factors (_n : int) : int = assert false
+let perfect_power (i : int) (n : int) : bool =
+  if i <= 0 then false
+  else if n = 0 then true
+  else if n < 0 && i mod 2 = 0 then false
+  else
+    let rec pow_int (b : int) (e : int) : int =
+      if e = 0 then 1 else b * pow_int b (e - 1)
+    in
+    let abs_n = abs n in
+    let upper =
+      int_of_float ((float_of_int abs_n) ** (1.0 /. float_of_int i)) + 1
+    in
+    let rec check k =
+      if k > upper then false
+      else if pow_int k i = abs_n then true
+      else check (k + 1)
+    in
+    check 0
 
-let perfect_power (_i : int) (_n : int) : bool = assert false
+let rec collatz (n : int) : int =
+  if n = 1 then 0
+  else if n mod 2 = 0 then 1 + collatz (n / 2)
+  else 1 + collatz (3 * n + 1)
 
-let collatz (_n : int) : int = assert false
-
-let tst_records (_i : int) : int = assert false
+let tst_records (i : int) : int =
+    let rec loop k best found =
+      let steps = collatz k in
+      if steps > best then
+        if found = i then k
+        else loop (k + 1) steps (found + 1)
+      else
+        loop (k + 1) best found
+    in
+    loop 1 (-1) 0
