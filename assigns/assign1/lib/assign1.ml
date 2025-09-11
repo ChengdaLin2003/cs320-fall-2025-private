@@ -10,8 +10,12 @@ let num_factors (_n : int) : int =
         counter _n 2 0;;
 
 let perfect_power (i : int) (n : int) : bool =
-  if i < 2 then false
-  else if n = 0 || n = 1 || n = -1 then false
+  if i = 0 then n = 1
+  else if i < 0 then
+    if n = 1 then true
+    else if n = -1 then (abs i) mod 2 = 1
+    else false
+  else if n = 0 then true
   else if n < 0 && i mod 2 = 0 then false
   else
     let abs_n = abs n in
@@ -31,7 +35,7 @@ let perfect_power (i : int) (n : int) : bool =
         let p = pow_bounded k i abs_n in
         if p = abs_n then true else check (k + 1)
     in
-    check 2
+    check 1
 let rec collatz (n : int) : int =
   if n = 1 then 0
   else if n mod 2 = 0 then 1 + collatz (n / 2)
