@@ -1,0 +1,4 @@
+(library
+ (public_name assign2)
+ (libraries stdlib320 zarith)
+ (flags (:standard -nostdlib -nopervasives -open Stdlib320)))

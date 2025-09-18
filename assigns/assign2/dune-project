@@ -1,0 +1,4 @@
+(lang dune 3.19)
+(name assign2)
+(generate_opam_files true)
+(package (name assign2) (depends ocaml dune stdlib320 zarith))
