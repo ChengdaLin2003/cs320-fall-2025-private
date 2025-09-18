@@ -26,14 +26,22 @@ let split_on_char (_c : char) (_s : string) : string list =
   loop 0 0 []
 
 let parse_fractran (_input : string) : Q.t list =
-  let tokens = split_on_char ' ' _input in
-  let to_frac (tok : string) : Q.t =
-    let parts = split_on_char '/' tok in
-    let numerator = Z.of_string (List.nth parts 0) in
-    let denominator = Z.of_string (List.nth parts 1) in
-    Q.make numerator denominator
+  let tokens = split_on_char ' ' _input |> List.filter (fun s -> s <> "") in
+  let rec fold toks acc =
+    match toks with
+    | [] -> List.rev acc
+    | tok :: rest ->
+        (match split_on_char '/' tok with
+         | [num_s; den_s] when num_s <> "" && den_s <> "" ->
+             (try
+                let num = Z.of_string num_s in
+                let den = Z.of_string den_s in
+                let q = Q.make num den in
+                fold rest (q :: acc)
+              with _ -> fold rest acc)
+         | _ -> fold rest acc)
   in
-  List.map to_frac tokens
+  fold tokens []
 
 let eval_fractran (_program : Q.t list) (_input : Z.t) : Z.t =
   let rec run n =
