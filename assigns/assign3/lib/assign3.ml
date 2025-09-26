@@ -48,7 +48,10 @@ let incr (_rs : registers) (_i : int) : registers =
     match rs with
     | [] -> [i, 1]
     | (key, value) :: xs ->
-      if key = i then (key, value + 1) :: xs
+      if key = i then
+        let newv = value + 1 in
+        if newv = 0 then xs
+        else (key, newv) :: xs
       else if (key > i) then (i, 1) :: (key, value) :: xs
       else (key, value) :: func xs i
   in
