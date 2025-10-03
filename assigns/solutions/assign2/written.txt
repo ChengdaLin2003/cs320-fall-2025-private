@@ -1,0 +1,50 @@
+───────────────────────
+Grammar Rule to English
+───────────────────────
+
+  <expr> ::= <expr>.[<expr>]
+
+  If e₁ is a well-formed expression and e₂ is a well-formed
+  expression, then e₁.[e₂] is a well-formed expression.
+
+──────────────────────────
+Typing Judgment to English
+──────────────────────────
+
+  { s : string , i : int } ⊢ s.[i] : char
+
+  Under the assumption that s is a string and i in an int, the
+  expression s.[i] is a char.
+
+──────────────────────
+Typing Rule to English
+──────────────────────
+
+  Γ ⊢ e₁ : string    Γ ⊢ e₂ : int
+  ─────────────────────────────── (string-index)
+        Γ ⊢ e₁.[e₂] : char
+
+  If e₁ is of type string in the context Γ and e₂ is of type int in
+  the context Γ, then e₁.[e₂] is of type char in the same context Γ.
+
+──────────────────────────
+Typing Judgements in OCaml
+──────────────────────────
+
+  { x : int, y : int , g : bool → int, h : int → bool } ⊢ let rec f x = f (x + g (f y)) in h (g (x = y)) = f x : bool
+
+  Γ =  { x : int, y : int , g : bool → int, h : int → bool }
+  τ = bool
+
+────────
+FRACTRAN
+────────
+
+               (pn / q) is an integer
+  ───────────────────────────────────────────── (int)
+  ⟨ P , (p / q) ∷ Q , n ⟩ ⟶ ⟨ P , P , pn / q ⟩
+
+
+          (pn / q) is not an integer
+  ──────────────────────────────────────── (not-int)
+  ⟨ P , (p / q) ∷ Q , n ⟩ ⟶ ⟨ P , Q , n ⟩
