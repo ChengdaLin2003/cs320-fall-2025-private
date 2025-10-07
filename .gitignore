@@ -1,2 +1,6 @@
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
 .DS_Store
 _build
