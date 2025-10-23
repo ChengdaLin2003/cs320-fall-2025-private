@@ -1,0 +1,3 @@
+(test
+ (libraries lab05)
+ (name test_lab05))

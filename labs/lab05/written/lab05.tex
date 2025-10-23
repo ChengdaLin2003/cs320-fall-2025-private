@@ -1,0 +1,139 @@
+\documentclass{article}[10pt]
+
+\usepackage{nmmmath}
+
+% palatino
+\usepackage{mathpazo}
+
+% 1 inch margins
+\usepackage[margin=0.5in, landscape]{geometry}
+
+% line spacing
+\usepackage{setspace}
+\setstretch{1.15}
+
+% better quotes
+\usepackage{csquotes}
+
+% standard math tools
+\usepackage{amsthm, amssymb, mathtools, bussproofs}
+
+% highlights
+\usepackage{soul}
+
+\title{Lab 5 Written Solutions}
+\author{\texttt{CAS CS 320}: \textit{Concepts of Programming Languages}}
+\date{}
+\begin{document}
+\maketitle
+
+\newcommand{\code}[1]{\textnormal{\textcolor{purple}{\texttt{#1}}}}
+\newcommand{\side}[1]{\hl{#1}}
+\newcommand{\topt}[1]{#1 \ \code{option}}
+\newcommand{\evar}[1]{\code{#1}}
+\newcommand{\eint}[1]{\code{#1}}
+\newcommand{\enone}{\code{None}}
+\newcommand{\vnone}{\mathsf{None}}
+\newcommand{\esome}[1]{\code{Some} \ #1}
+\newcommand{\vsome}[1]{\mathsf{Some}(#1)}
+\newcommand{\ematch}[1]{\code{match} \ #1 \ \code{with}}
+\newcommand{\ecase}[2]{\ \code{|} \ #1 \ \code{->} \ #2}
+\newcommand{\efun}[2]{\code{fun} \ #1 \ \code{->} \ #2}
+\newcommand{\tfun}[2]{#1 \ \code{->} \ #2}
+\newcommand{\tint}{\code{int}}
+\newcommand{\G}{\Gamma}
+\newcommand{\eC}{\varnothing}
+\newcommand{\ent}{\vdash}
+\newcommand{\ev}{\Downarrow}
+\newcommand{\subst}[3]{[#1 / #2] #3}
+
+\pagenumbering{gobble}
+
+\noindent Typing rules for options:
+
+\begin{center}
+  \AxiomC{}
+  \RightLabel{(none)}
+  \UnaryInfC{$\G \ent \enone : \topt \tau$}
+  \DisplayProof
+  \qquad
+  \AxiomC{$\G \ent e : \tau$}
+  \RightLabel{(some)}
+  \UnaryInfC{$\G \ent \esome e : \topt \tau$}
+  \DisplayProof
+  \AxiomC{$\G \ent e_1 : \topt {\tau_1}$}
+  \AxiomC{$\G \ent e_2 : \tau$}
+  \AxiomC{$\G, x : \tau_1 \ent e_3 : \tau$}
+  \RightLabel{(opt-match)}
+  \qquad
+  \TrinaryInfC{$\G \ent \ematch {e_1} \ecase \enone {e_2} \ecase {\esome x} {e_3} : \tau$}
+  \DisplayProof
+\end{center}
+
+\noindent Semantic rules for options:
+
+\begin{center}
+  \AxiomC{}
+  \RightLabel{(none-eval)}
+  \UnaryInfC{$\enone \ev \vnone$}
+  \DisplayProof
+  \qquad
+  \AxiomC{$e \ev v$}
+  \RightLabel{(some-eval)}
+  \UnaryInfC{$\esome e \ev \vsome v$}
+  \DisplayProof
+\end{center}
+
+\begin{center}
+  \AxiomC{$e_1 \ev \vnone$}
+  \AxiomC{$e_2 \ev v$}
+  \RightLabel{(opt-eval-none)}
+  \BinaryInfC{$\ematch e_1 \ecase \enone {e_2} \ecase {\esome x} {e_3} \ev v$}
+  \DisplayProof
+  \qquad
+  \AxiomC{$e_1 \ev \vsome {v_1}$}
+  \AxiomC{\side{$e = \subst {v_1} x {e_3}$}}
+  \AxiomC{$e \ev v$}
+  \RightLabel{(opt-eval-some)}
+  \TrinaryInfC{$\ematch {e_1} \ecase \enone {e_2} \ecase {\esome x} {e_3} \ev v$}
+  \DisplayProof
+\end{center}
+
+\noindent Typing Derivation:
+
+\begin{center}
+  \AxiomC{}
+  \RightLabel{(var)}
+  \UnaryInfC{$\{\evar x : \topt \tint \} \ent \evar x : \topt \tint$}
+  \AxiomC{}
+  \RightLabel{(int)}
+  \UnaryInfC{$\{\evar x : \topt \tint \} \ent \evar 0 : \tint$}
+  \AxiomC{}
+  \RightLabel{(var)}
+  \UnaryInfC{$\{\evar x : \topt \tint , \evar y : \tint \} \ent \evar y : \tint$}
+  \RightLabel{(opt-match)}
+  \TrinaryInfC{$\{\evar x : \topt \tint \} \ent \ematch {\evar x} \ecase \enone {\eint 0} \ecase {\esome {\evar y}} {\evar y} : \tint$}
+  \RightLabel{(fun)}
+  \UnaryInfC{$\eC \ent \efun {\evar x} {\ematch {\evar x} \ecase \enone {\eint 0} \ecase {\esome {\evar y}} {\evar y}} : \tfun {\topt{\tint}} \tint$}
+  \DisplayProof
+\end{center}
+
+\noindent Semantic Derivation:
+
+\begin{center}
+  \AxiomC{}
+  \RightLabel{(int-eval)}
+  \UnaryInfC{$\eint 2 \ev 2$}
+  \RightLabel{(some-eval)}
+  \UnaryInfC{$\esome {\eint 2} \ev \vsome 2$}
+  \AxiomC{}
+  \RightLabel{(int-eval)}
+  \UnaryInfC{$\eint 2 \ev 2$}
+  \RightLabel{(opt-eval-some)}
+  \BinaryInfC{$\ematch {\esome {\eint 2}} \ecase \enone {\eint 0} \ecase {\esome {\evar y}} {\evar y} \ev 2$}
+  \DisplayProof
+\end{center}
+
+\noindent Note the right premise comes from the fact that the side condition:  $\subst 2 {\evar y} {\evar y} = \eint 2$.\footnote{There's a somewhat subtle point here. When we substitute a value into an expression, we also convert it into an expression. In this case when we substitute $2$ for $\evar y$ in $\evar y$, it becomes \textit{the expression} $\eint 2$, not the value $2$.}
+
+\end{document}
