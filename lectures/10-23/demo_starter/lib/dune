@@ -1,1 +1,1 @@
-(library (name demo))
+(library (public_name demo))
