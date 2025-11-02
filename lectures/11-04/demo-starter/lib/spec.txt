@@ -1,0 +1,46 @@
+
+  ╭───────────╮
+  │ Grammar   │
+  ╰───────────╯
+
+  <prog>  ::= <expr>
+  <expr>  ::= fun <var> -> <expr>
+            | <expr2> { <expr2> }
+  <expr2> ::= <var> | <int> | ( <expr> )
+
+  ╭───────────╮
+  │ Semantics │
+  ╰───────────╯
+
+   n is an int
+   ─────────── (eval-int)
+     n ⇓ n
+
+   ───────────────────── (eval-int)
+   fun x -> e ⇓ λ x . e
+
+   e₁ ⇓ λ x . e    e₂ ⇓ v₂    [v₂ / x]e ⇓ v
+   ────────────────────────────────────────── (eval-int)
+                  e₁ e₂ ⇓ v
+
+  ╭──────────────╮
+  │ Substitution │
+  ╰──────────────╯
+
+   (ASSUMING v HAS NO FREE VARIABLES):
+
+   [v / x]n            =  n                      n is an int
+   [v / x]y            =  v                      x = y
+                       &  y                      otherwise
+   [v / x](fun y -> e) = fun y -> e              x = y
+                       & fun y -> [v / x]e       otherwise
+   [v / x](e₁ e₂)      = ([v / x]e₁)([v / x]e₂)
+
+  ╭────────────────╮
+  │ Free Variables │
+  ╰────────────────╯
+
+   fv(n)     = ∅  (n is an int)
+   fv(x)     = {x}
+   fv(λx.e)  = fv(e) \ {x}
+   fv(e₁ e₂) = fv(e₁) ∪ fv(e₂)
