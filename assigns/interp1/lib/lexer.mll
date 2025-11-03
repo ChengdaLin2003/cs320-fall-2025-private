@@ -9,8 +9,13 @@ rule read = parse
   | space+        { read lexbuf }
   | "let"         { LET }
   | "in"          { IN }
+  | "true"        { TRUE }
+  | "false"       { FALSE }
+  | "&&"          { AND }
+  | "||"          { OR }
   | '='           { EQ }
   | '+'           { PLUS }
+  | '*'           { STAR }
   | '('           { LPAREN }
   | ')'           { RPAREN }
   | '1'           { NUM 1 }
