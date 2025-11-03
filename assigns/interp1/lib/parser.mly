@@ -39,7 +39,7 @@ and_expr:
 ;
 
 rel_expr:
-  | rel_expr LT add_expr           { Bop(Lt,  $1, $3) }
+  | add_expr LT add_expr           { Bop(Lt,  $1, $3) }
   | add_expr                       { $1 }
 ;
 
