@@ -1,24 +1,24 @@
 %{
-open Utils
+    open Utils
 %}
 
 %token LET
 %token EQ
 %token IN
-%token ADD
-%token SUB
-%token MUL
-%token DIV
+%token EOF
+%token PLUS
+%token MINUS
+%token STAR
+%token SLASH
 %token LPAREN
 %token RPAREN
-%token<int> NUM
-%token<string> VAR
-%token EOF
-
-%left ADD SUB
-%left MUL DIV
+%token<string> IDENT
+%token<int> INT
 
 %start <Utils.prog> prog
+
+%left PLUS, MINUS
+%left STAR, SLASH
 
 %%
 
@@ -26,25 +26,23 @@ prog:
   | e = expr; EOF { e }
 
 expr:
-  | LET; x = var; EQ; e1 = expr; IN; e2 = expr
-    { Let (x, e1, e2) }
+  | LET; x = var; EQ; e1 = expr; IN; e2 = expr { Let (x, e1, e2) }
   | e = expr1 { e }
 
 %inline bop:
-  | ADD { Add }
-  | SUB { Sub }
-  | MUL { Mul }
-  | DIV { Div }
+  | PLUS { Add }
+  | MINUS { Sub }
+  | STAR { Mul }
+  | SLASH { Div }
 
 expr1:
-  | e1 = expr1; op = bop; e2 = expr1
-    { Bop (op, e1, e2) }
+  | e1 = expr1; op = bop; e2 = expr1 { Bop (op, e1, e2) }
   | n = num { Num n }
-  | v = var { Var v }
+  | x = var { Var x }
   | LPAREN; e = expr; RPAREN { e }
 
 num:
-  | n = NUM { n }
+  | n = INT { n }
 
 var:
-  | x = VAR { x }
+  | x = IDENT { x }
