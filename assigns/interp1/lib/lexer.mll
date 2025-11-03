@@ -1,6 +1,7 @@
 {
   open Parser
 
+  (* 关键字映射 *)
   let keyword = function
     | "let"   -> Some LET
     | "in"    -> Some IN
@@ -14,16 +15,23 @@
 }
 
 rule read = parse
-  | [' ' '\t' '\r' '\n']        { read lexbuf }
+  (* 空白与单行注释 *)
+  | [' ' '\t' '\r' '\n']+        { read lexbuf }
   | "//" [^'\n']*               { read lexbuf }
-  | "(*"                        { comment 0 lexbuf }
+  | "(*"                        { comment 1 lexbuf }
 
-  (* multi-char must come before single-char *)
+  (* 多字符运算/记号必须在前面 *)
   | "||"                        { OR }
   | "&&"                        { AND }
+  | "<="                        { LE }
+  | ">="                        { GE }
+  | "<>"                        { NEQ }
   | "->"                        { ARROW }
+  | "()"                        { UNIT }
 
+  (* 单字符运算/括号 *)
   | "<"                         { LT }
+  | ">"                         { GT }
   | "+"                         { PLUS }
   | "-"                         { MINUS }
   | "*"                         { STAR }
@@ -32,24 +40,22 @@ rule read = parse
   | "("                         { LPAREN }
   | ")"                         { RPAREN }
 
+  (* 数字：仅 digits；负数用语法表示如 (-5) *)
   | ['0'-'9']+ as n             { NUM (int_of_string n) }
 
-  (* single leading apostrophe -> produce a token that parser won't consume *)
-  | "'"                         { APOSTROPHE }
-
-  (* identifiers: first char cannot be apostrophe; subsequent chars may include it *)
-  | ['a'-'z' 'A'-'Z' '_']['a'-'z' 'A'-'Z' '_' '0'-'9' '\'']* as id {
+  (* “mod” 运算符；其他标识符看是否关键字，否则为 VAR *)
+  | "mod"                       { MOD }
+  | ['a'-'z' '_']['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']* as id {
       match keyword id with
       | Some kw -> kw
       | None    -> VAR id
     }
 
   | eof                         { EOF }
-  (* for any other unexpected char, skip it to let parser fail gracefully *)
   | _                           { read lexbuf }
 
 and comment depth = parse
   | "(*"                        { comment (depth + 1) lexbuf }
-  | "*)"                        { if depth = 0 then read lexbuf else comment (depth - 1) lexbuf }
+  | "*)"                        { if depth = 1 then read lexbuf else comment (depth - 1) lexbuf }
   | eof                         { failwith "Unterminated comment" }
   | _                           { comment depth lexbuf }
