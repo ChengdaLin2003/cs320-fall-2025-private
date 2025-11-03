@@ -4,6 +4,7 @@
 %token PLUS MINUS STAR SLASH LPAREN RPAREN AND OR LT
 %token ARROW
 %token EQ
+%token APOSTROPHE   /* produced by lexer for stray ' ; never consumed by grammar */
 %token <int> NUM
 %token <string> VAR
 %token EOF
@@ -21,6 +22,7 @@ prog:
   | expr EOF { $1 }
 ;
 
+(* let/if/fun bind looser than binary ops *)
 expr:
   | LET VAR EQ expr IN expr        { Let($2, $4, $6) }
   | IF expr THEN expr ELSE expr    { If($2, $4, $6) }
@@ -38,6 +40,7 @@ and_expr:
   | rel_expr                       { $1 }
 ;
 
+(* forbid chained comparisons: allow at most one '<' *)
 rel_expr:
   | add_expr LT add_expr           { Bop(Lt,  $1, $3) }
   | add_expr                       { $1 }
@@ -60,6 +63,7 @@ unary_expr:
   | app_expr                       { $1 }
 ;
 
+(* function application is left-assoc and tighter than binary ops *)
 app_expr:
   | app_expr atom                  { App($1, $2) }
   | atom                           { $1 }
