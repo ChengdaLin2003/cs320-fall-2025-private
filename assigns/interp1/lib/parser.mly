@@ -16,14 +16,12 @@ open Utils
 %start prog
 %type <expr> prog
 
-/* Precedence (low -> high): OR (right), AND (right),
-   comparisons (left), + - (left), * / mod (left), application (highest). */
 %right OR
 %right AND
 %left LT LE GT GE EQ NEQ
 %left PLUS MINUS
 %left STAR SLASH MOD
-%left APP   /* 会被 Menhir 警告“never useful”，保留即可 */
+%left APP 
 
 %%
 
@@ -62,13 +60,15 @@ mul_expr:
   | app_expr                          { $1 }
 
 app_expr:
-  | app_expr atom %prec APP           { App ($1, $2) }  /* 这个 %prec 会被警告，保留 */
+  | app_expr atom %prec APP           { App ($1, $2) } 
   | atom                              { $1 }
 
 atom:
   | IF expr THEN expr ELSE expr       { If ($2, $4, $6) }
   | LET VAR EQ expr IN expr           { Let ($2, $4, $6) }
   | FUN VAR ARROW expr                { Fun ($2, $4) }
+  | MINUS NUM                         { Num (- $2) }
+  | MINUS atom                        { Bop (Sub, Num 0, $2) }
   | NUM                               { Num $1 }
   | TRUE                              { True }
   | FALSE                             { False }
