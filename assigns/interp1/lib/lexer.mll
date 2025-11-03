@@ -23,7 +23,9 @@ rule read = parse
   | "->"                           { ARROW }
   | "<"                            { LT }
   | "+"                            { PLUS }
+  | "-"                            { MINUS }
   | "*"                            { STAR }
+  | "/"                            { SLASH }
   | "="                            { EQ }
   | "("                            { LPAREN }
   | ")"                            { RPAREN }
