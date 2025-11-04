@@ -1,7 +1,10 @@
 {
   open Parser
 
-  (* 关键字映射 *)
+  (* ------------------------------------------------------ *)
+  (* Keyword recognition: returns Some <token> if the       *)
+  (* identifier matches a reserved word, otherwise None.    *)
+  (* ------------------------------------------------------ *)
   let keyword = function
     | "let"   -> Some LET
     | "in"    -> Some IN
@@ -14,13 +17,19 @@
     | _ -> None
 }
 
+(* ------------------------------------------------------ *)
+(* Main lexing rule: read successive tokens from input.   *)
+(* The first matching pattern is chosen, so order matters *)
+(* (multi-character symbols must appear before single ones). *)
+(* ------------------------------------------------------ *)
 rule read = parse
-  (* 空白与单行注释 *)
-  | [' ' '\t' '\r' '\n']+        { read lexbuf }
-  | "//" [^'\n']*               { read lexbuf }
-  | "(*"                        { comment 1 lexbuf }
 
-  (* 多字符运算/记号必须在前面 *)
+  (* ---------- Whitespace and Comments ---------- *)
+  | [' ' '\t' '\r' '\n']+        { read lexbuf }    (* Skip all whitespace *)
+  | "//" [^'\n']*               { read lexbuf }     (* Single-line comments: '//' ... newline *)
+  | "(*"                        { comment 1 lexbuf }(* Multi-line / nested comments start *)
+
+  (* ---------- Multi-character operators ---------- *)
   | "||"                        { OR }
   | "&&"                        { AND }
   | "<="                        { LE }
@@ -29,7 +38,7 @@ rule read = parse
   | "->"                        { ARROW }
   | "()"                        { UNIT }
 
-  (* 单字符运算/括号 *)
+  (* ---------- Single-character operators / punctuation ---------- *)
   | "<"                         { LT }
   | ">"                         { GT }
   | "+"                         { PLUS }
@@ -40,22 +49,31 @@ rule read = parse
   | "("                         { LPAREN }
   | ")"                         { RPAREN }
 
-  (* 数字：仅 digits；负数用语法表示如 (-5) *)
+  (* ---------- Numeric literals ---------- *)
   | ['0'-'9']+ as n             { NUM (int_of_string n) }
+      (* Only non-negative digits here; unary '-' handled in parser. *)
 
-  (* “mod” 运算符；其他标识符看是否关键字，否则为 VAR *)
+  (* ---------- Identifiers and Keywords ---------- *)
   | "mod"                       { MOD }
   | ['a'-'z' '_']['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']* as id {
       match keyword id with
-      | Some kw -> kw
-      | None    -> VAR id
+      | Some kw -> kw          (* reserved keyword *)
+      | None    -> VAR id      (* otherwise a variable name *)
     }
 
+  (* ---------- End of input ---------- *)
   | eof                         { EOF }
+
+  (* ---------- Catch-all: skip any unrecognized character ---------- *)
   | _                           { read lexbuf }
 
+
+(* ------------------------------------------------------ *)
+(* Nested comment handling: supports (* ... (* ... *) ... *) *)
+(* ------------------------------------------------------ *)
 and comment depth = parse
-  | "(*"                        { comment (depth + 1) lexbuf }
-  | "*)"                        { if depth = 1 then read lexbuf else comment (depth - 1) lexbuf }
+  | "(*"                        { comment (depth + 1) lexbuf }  (* new nested level *)
+  | "*)"                        { if depth = 1 then read lexbuf (* leave last level *)
+                                  else comment (depth - 1) lexbuf }
   | eof                         { failwith "Unterminated comment" }
-  | _                           { comment depth lexbuf }
+  | _                           { comment depth lexbuf }         (* consume anything inside *)

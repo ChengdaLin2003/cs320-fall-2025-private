@@ -1,48 +1,71 @@
 %{
+(* Bring in AST type definitions from Utils. *)
 open Utils
 %}
 
-%token <int> NUM
-%token <string> VAR
-%token TRUE FALSE
-%token LET IN IF THEN ELSE FUN ARROW
-%token PLUS MINUS STAR SLASH MOD
-%token LT LE GT GE EQ NEQ
-%token AND OR
-%token UNIT
-%token LPAREN RPAREN
-%token EOF
+(* ------------------------------------------------------ *)
+(* Token Declarations                                    *)
+(* ------------------------------------------------------ *)
+%token <int> NUM              /* integer literal */
+%token <string> VAR           /* variable name */
+%token TRUE FALSE             /* boolean literals */
+%token LET IN IF THEN ELSE    /* keywords for let / if */
+%token FUN ARROW              /* function keyword and arrow "->" */
+%token PLUS MINUS STAR SLASH MOD   /* arithmetic operators */
+%token LT LE GT GE EQ NEQ          /* comparison operators */
+%token AND OR                      /* logical operators */
+%token UNIT                        /* "()" literal */
+%token LPAREN RPAREN               /* parentheses */
+%token EOF                         /* end of input marker */
 
+(* ------------------------------------------------------ *)
+(* Entry point and return type                            *)
+(* ------------------------------------------------------ *)
 %start prog
 %type <expr> prog
 
-(* 从低到高优先级： OR, AND, 比较, + -, * / mod, 一元-, 应用, 原子 *)
-%left OR
+(* ------------------------------------------------------ *)
+(* Operator Precedence and Associativity                  *)
+(* Lower lines = higher precedence                        *)
+(* ------------------------------------------------------ *)
+%left OR                      /* lowest precedence */
 %left AND
 %left LT LE GT GE EQ NEQ
 %left PLUS MINUS
 %left STAR SLASH MOD
-%left APP
+%left APP                     /* function application (highest) */
 
 %%
 
+(* ====================================================== *)
+(* Grammar Rules                                           *)
+(* Each nonterminal builds an AST node from subexpressions. *)
+(* ====================================================== *)
+
+(* ------------------------------------------------------ *)
+(* Top-level: program is a single expression followed by EOF *)
+(* ------------------------------------------------------ *)
 prog:
   | expr EOF                          { $1 }
 
+(* Entry point for expressions *)
 expr:
   | or_expr                           { $1 }
 
-(* || 左结合 *)
+(* ---------- Boolean OR ---------- *)
+(* Left-associative: (a || b || c) => (Or (Or a b) c) *)
 or_expr:
   | or_expr OR and_expr               { Bop (Or,  $1, $3) }
   | and_expr                          { $1 }
 
-(* && 左结合 *)
+(* ---------- Boolean AND ---------- *)
+(* Left-associative, higher precedence than OR *)
 and_expr:
   | and_expr AND cmp_expr             { Bop (And, $1, $3) }
   | cmp_expr                          { $1 }
 
-(* 比较：支持链式、左结合 *)
+(* ---------- Comparisons ---------- *)
+(* Left-associative (for chained comparisons, left nest). *)
 cmp_expr:
   | cmp_expr LT  add_expr             { Bop (Lt,  $1, $3) }
   | cmp_expr LE  add_expr             { Bop (Lte, $1, $3) }
@@ -52,31 +75,40 @@ cmp_expr:
   | cmp_expr NEQ add_expr             { Bop (Neq, $1, $3) }
   | add_expr                          { $1 }
 
-(* + - 左结合 *)
+(* ---------- Addition / Subtraction ---------- *)
+(* Left-associative: (1 - 2 - 3) => (Sub (Sub 1 2) 3) *)
 add_expr:
   | add_expr PLUS  mul_expr           { Bop (Add, $1, $3) }
   | add_expr MINUS mul_expr           { Bop (Sub, $1, $3) }
   | mul_expr                          { $1 }
 
-(* * / mod 左结合；右侧为 u_expr，让一元-先结合再参与乘除 *)
+(* ---------- Multiplication / Division / Mod ---------- *)
+(* Left-associative and binds tighter than +/-. 
+   The right operand is a u_expr so that unary '-' binds first. *)
 mul_expr:
   | mul_expr STAR  u_expr             { Bop (Mul, $1, $3) }
   | mul_expr SLASH u_expr             { Bop (Div, $1, $3) }
   | mul_expr MOD   u_expr             { Bop (Mod, $1, $3) }
   | u_expr                            { $1 }
 
-(* 一元层：既支持 -NUM → Num (-n)，也支持通用 -e → 0 - e。放在应用之上，避免把 -e 当作原子参与 App *)
+(* ---------- Unary Operators ---------- *)
+(* Handles unary minus both for numeric literals (-3)
+   and general expressions (-e = 0 - e). 
+   Placed above application to avoid mis-parsing as App(1, -2). *)
 u_expr:
-  | MINUS NUM                         { Num (- $2) }                 /* 负数字面，满足 larger 的 AST 形状 */
-  | MINUS u_expr                      { Bop (Sub, Num 0, $2) }       /* 通用一元负号 */
+  | MINUS NUM                         { Num (- $2) }             /* literal negative number */
+  | MINUS u_expr                      { Bop (Sub, Num 0, $2) }   /* general negation */
   | app_expr                          { $1 }
 
-(* 应用（左结合）：只连缀 primary，primary 不含一元-，避免 App(1, -2) *)
+(* ---------- Function Application ---------- *)
+(* Left-associative: f x y = App(App(f,x),y). 
+   Has highest precedence, below unary ops. *)
 app_expr:
   | app_expr primary %prec APP        { App ($1, $2) }
   | primary                           { $1 }
 
-(* 原子：let/if/fun/常量/变量/括号 *)
+(* ---------- Atomic Expressions ---------- *)
+(* Core syntactic forms that cannot be decomposed further. *)
 primary:
   | IF expr THEN expr ELSE expr       { If ($2, $4, $6) }
   | LET VAR EQ expr IN expr           { Let ($2, $4, $6) }
