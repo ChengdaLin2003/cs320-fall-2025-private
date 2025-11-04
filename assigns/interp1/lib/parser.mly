@@ -58,24 +58,24 @@ add_expr:
   | add_expr MINUS mul_expr           { Bop (Sub, $1, $3) }
   | mul_expr                          { $1 }
 
-(* * / mod 左结合；操作数使用含一元-的 u_expr *)
+(* * / mod 左结合；注意：右侧改为 u_expr，这样一元-先结合，再参与乘除 *)
 mul_expr:
   | mul_expr STAR  u_expr             { Bop (Mul, $1, $3) }
   | mul_expr SLASH u_expr             { Bop (Div, $1, $3) }
   | mul_expr MOD   u_expr             { Bop (Mod, $1, $3) }
   | u_expr                            { $1 }
 
-(* 一元层：-e 统一为 0 - e；放在“应用”之上，避免把 “-e” 当原子参与应用 *)
+(* 一元负号层：-e 统一为 0 - e；放在应用之上，避免把 -e 当原子触发 App *)
 u_expr:
   | MINUS u_expr                      { Bop (Sub, Num 0, $2) }
   | app_expr                          { $1 }
 
-(* 应用（左结合）：对 primary 进行左连缀 *)
+(* 应用（左结合）：对 primary 进行左连缀。primary 中不含一元- *)
 app_expr:
   | app_expr primary %prec APP        { App ($1, $2) }
   | primary                           { $1 }
 
-(* 原子：不包含一元-；let/if/fun/常量/变量/括号 *)
+(* 原子：let/if/fun/常量/变量/括号 *)
 primary:
   | IF expr THEN expr ELSE expr       { If ($2, $4, $6) }
   | LET VAR EQ expr IN expr           { Let ($2, $4, $6) }
