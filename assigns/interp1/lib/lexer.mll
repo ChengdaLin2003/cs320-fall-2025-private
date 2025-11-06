@@ -12,6 +12,7 @@
     | "then"  -> Some THEN
     | "else"  -> Some ELSE
     | "fun"   -> Some FUN
+    | "rec"   -> Some REC
     | "true"  -> Some TRUE
     | "false" -> Some FALSE
     | _ -> None

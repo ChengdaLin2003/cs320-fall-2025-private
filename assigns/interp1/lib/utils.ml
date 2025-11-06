@@ -50,3 +50,18 @@ let string_of_value = function
   | VBool b -> string_of_bool b
   | VFun _ -> "<fun>"                        (* functions have no printable body *)
   | VUnit -> "()"
+(* Pretty-print a binary operator for error messages. *)
+let string_of_bop = function
+  | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "mod"
+  | Lt -> "<" | Lte -> "<=" | Gt -> ">" | Gte -> ">="
+  | Eq -> "=" | Neq -> "<>"
+  | And -> "&&" | Or -> "||"
+
+(* Pretty-print an interpreter error. *)
+let string_of_error = function
+  | UnknownVar x     -> "unknown variable: " ^ x
+  | InvalidArgs op   -> "invalid operands for operator " ^ string_of_bop op
+  | InvalidIfCond    -> "if condition is not a boolean"
+  | InvalidApp       -> "attempted to apply a non-function value"
+  | DivByZero        -> "division by zero"
+  | ParseFail        -> "parse failure"
