@@ -7,11 +7,11 @@ type expr =
   | If of expr * expr * expr
   | App of expr * expr
   | Let of string * expr * expr
+  | LetRec of string * string * expr * expr
 
 type prog = expr
 
 module Env = Map.Make(String)
-
 
 type value =
   | VBool of bool
