@@ -7,7 +7,7 @@ let fix_expr : expr =
   let f = "f" and x = "x" and v = "v" in
   let inner = Fun (v, App (App (Var x, Var x), Var v)) in
   let fx = Fun (x, App (Var f, inner)) in
-  App (fx, fx)
+  Fun (f, App (fx, fx))
 %}
 
 (* ---------- Tokens ---------- *)
@@ -59,7 +59,12 @@ expr:
 noninfix:
   | IF expr THEN expr ELSE expr        { If ($2, $4, $6) }
   | LET VAR EQ expr IN expr            { Let ($2, $4, $6) }
-  | LET REC VAR EQ expr IN expr        { Let ($3, App (fix_expr, Fun ($3, $5)), $7) }
+  | LET REC VAR EQ expr IN expr      { Let ($3, $5, $7) }
+  | LET REC VAR EQ FUN VAR ARROW expr IN expr
+        { Let ($3,
+                App (fix_expr,
+                     Fun ("\000self", Fun ($6, Let ($3, Var "\000self", $8)))) ,
+                $10) }
   | FUN VAR ARROW expr                 { Fun ($2, $4) }
   | app_expr                           { $1 }
   | primary                           { $1 }
