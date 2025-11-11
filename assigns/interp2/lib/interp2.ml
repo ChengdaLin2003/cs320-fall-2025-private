@@ -26,7 +26,9 @@ let expr_of_value (v : value) : expr =
 (* -------------------- Substitution -------------------- *)
 
 (** [subst v x e] performs capture-avoiding substitution [v/x]e:
-    Replace all *free* occurrences of variable [x] in [e] with [v]. *)
+    Replace all *free* occurrences of variable [x] in [e] with [v].
+    Since values contain no free variables (they are closed),
+    it’s sufficient to stop at binders that shadow [x]. *)
 let rec subst (v : value) (x : string) (e : expr) : expr =
   match e with
   | Unit | True | False | Num _ -> e

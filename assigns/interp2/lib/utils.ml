@@ -14,48 +14,57 @@ type expr =
   | Num of int                               (* integer literal *)
   | Var of string                            (* variable reference *)
   | Let of string * expr * expr              (* let x = e1 in e2 *)
-  | If of expr * expr * expr                 (* if e1 then e2 else e3 *)
-  | Fun of string * expr                     (* anonymous function fun x -> e *)
-  | App of expr * expr                       (* function application e1 e2 *)
-  | Bop of bop * expr * expr                 (* binary operation e1 op e2 *)
-
-(* -------------------- Program Type -------------------- *)
-(** In this language, a program is simply an expression. *)
-type prog = expr
+  | If of expr * expr * expr                 (* if c then t else f *)
+  | Fun of string * expr                     (* fun x -> e *)
+  | App of expr * expr                       (* e1 e2 *)
+  | Bop of bop * expr * expr                 (* e1 op e2 *)
 
 (* -------------------- Runtime Values -------------------- *)
-(** [value] represents evaluated runtime results.
-    Functions are represented as closures (here, just syntax-based). *)
+(** [value] are runtime values produced by the evaluator. *)
 type value =
-  | VNum of int                              (* integer value *)
-  | VBool of bool                            (* boolean value *)
-  | VFun of string * expr                    (* function closure: parameter + body *)
-  | VUnit                                    (* unit value *)
+  | VUnit
+  | VBool of bool
+  | VNum of int
+  | VFun of string * expr    (* a simple closure with just parameter & body *)
 
-(* -------------------- Runtime Errors -------------------- *)
-(** [error] enumerates all possible runtime and parsing errors. *)
+(* -------------------- Errors -------------------- *)
+(** [error] enumerates all runtime/driver errors we surface. *)
 type error =
-  | UnknownVar of string                     (* variable not found in environment *)
-  | InvalidArgs of bop                       (* wrong operand type for operator *)
-  | InvalidIfCond                            (* non-boolean if condition *)
-  | InvalidApp                               (* applying non-function *)
-  | DivByZero                                (* division/mod by zero *)
-  | ParseFail                                (* parser failed to produce AST *)
+  | UnknownVar of string
+  | InvalidArgs of bop
+  | InvalidIfCond
+  | InvalidApp
+  | DivByZero
+  | ParseFail
 
-(* -------------------- Pretty-printing -------------------- *)
-(** [string_of_value v] converts a runtime value to string.
-    Used for debugging and printing final interpreter results. *)
-let string_of_value = function
-  | VNum n -> string_of_int n
-  | VBool b -> string_of_bool b
-  | VFun _ -> "<fun>"                        (* functions have no printable body *)
-  | VUnit -> "()"
-(* Pretty-print a binary operator for error messages. *)
+(* -------------------- Pretty-printers -------------------- *)
+
 let string_of_bop = function
   | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "mod"
   | Lt -> "<" | Lte -> "<=" | Gt -> ">" | Gte -> ">="
   | Eq -> "=" | Neq -> "<>"
   | And -> "&&" | Or -> "||"
+
+let rec string_of_expr = function
+  | Unit -> "()"
+  | True -> "true"
+  | False -> "false"
+  | Num n -> string_of_int n
+  | Var x -> x
+  | Let (x,e1,e2) ->
+      "let " ^ x ^ " = " ^ string_of_expr e1 ^ " in " ^ string_of_expr e2
+  | If (c,t,f) ->
+      "if " ^ string_of_expr c ^ " then " ^ string_of_expr t ^ " else " ^ string_of_expr f
+  | Fun (x,e) -> "(fun " ^ x ^ " -> " ^ string_of_expr e ^ ")"
+  | App (e1,e2) -> "(" ^ string_of_expr e1 ^ " " ^ string_of_expr e2 ^ ")"
+  | Bop (op,e1,e2) ->
+      "(" ^ string_of_expr e1 ^ " " ^ string_of_bop op ^ " " ^ string_of_expr e2 ^ ")"
+
+let string_of_value = function
+  | VUnit -> "()"
+  | VBool b -> string_of_bool b
+  | VNum n -> string_of_int n
+  | VFun _ -> "<fun>"
 
 (* Pretty-print an interpreter error. *)
 let string_of_error = function
@@ -65,3 +74,7 @@ let string_of_error = function
   | InvalidApp       -> "attempted to apply a non-function value"
   | DivByZero        -> "division by zero"
   | ParseFail        -> "parse failure"
+
+(* -------------------- Top-level program -------------------- *)
+(** The driver expects [prog] to be the same as [expr] at this stage. *)
+type prog = expr
