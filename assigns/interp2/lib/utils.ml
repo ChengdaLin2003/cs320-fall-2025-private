@@ -1,25 +1,29 @@
+(* -------------------- Binary Operators -------------------- *)
 type bop =
-  | Add | Sub | Mul | Div | Mod
-  | Lt | Lte | Gt | Gte | Eq | Neq
-  | And | Or
+  | Add | Sub | Mul | Div | Mod              (* + - * / mod *)
+  | Lt | Lte | Gt | Gte | Eq | Neq           (* < <= > >= = <> *)
+  | And | Or                                  (* && || *)
 
+(* -------------------- Abstract Syntax Tree -------------------- *)
 type expr =
   | Unit
   | True | False
   | Num of int
   | Var of string
-  | Let of string * expr * expr
-  | If of expr * expr * expr
-  | Fun of string * expr
-  | App of expr * expr
-  | Bop of bop * expr * expr
+  | Let of string * expr * expr              (* let x = e1 in e2 *)
+  | If of expr * expr * expr                 (* if c then t else f *)
+  | Fun of string * expr                     (* fun x -> e *)
+  | App of expr * expr                       (* e1 e2 *)
+  | Bop of bop * expr * expr                 (* e1 op e2 *)
 
+(* -------------------- Runtime Values -------------------- *)
 type value =
   | VUnit
   | VBool of bool
   | VNum of int
-  | VFun of string * expr
+  | VFun of string * expr                    (* 函数值（闭包里仅形参与函数体） *)
 
+(* -------------------- Errors -------------------- *)
 type error =
   | UnknownVar of string
   | InvalidArgs of bop
@@ -28,6 +32,7 @@ type error =
   | DivByZero
   | ParseFail
 
+(* -------------------- Pretty-printers -------------------- *)
 let string_of_bop = function
   | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "mod"
   | Lt -> "<" | Lte -> "<=" | Gt -> ">" | Gte -> ">="
@@ -63,4 +68,5 @@ let string_of_error = function
   | DivByZero        -> "division by zero"
   | ParseFail        -> "parse failure"
 
+(* 顶层程序类型 *)
 type prog = expr
