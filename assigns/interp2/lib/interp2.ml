@@ -1,7 +1,7 @@
 open Utils
 
 (******************************************************************
- * 重新导出 ty 和 expr 类型，让构造器在 Interp2 中也可见
+ * 重新导出 ty / expr / sfexpr 类型，让构造器在 Interp2 中也可见
  ******************************************************************)
 
 type ty = Utils.ty =
@@ -27,6 +27,28 @@ type expr = Utils.expr =
       body : expr;
     }
   | Assert of expr
+
+type sfexpr = Utils.sfexpr =
+  | SUnit
+  | SBool of bool
+  | SNum of int
+  | SVar of string
+  | SFun of {
+      args : (string * ty) list;
+      body : sfexpr;
+    }
+  | SApp of sfexpr list
+  | SLet of {
+      is_rec : bool;
+      name : string;
+      args : (string * ty) list;
+      ty : ty;
+      binding : sfexpr;
+      body : sfexpr;
+    }
+  | SIf of sfexpr * sfexpr * sfexpr
+  | SBop of bop * sfexpr * sfexpr
+  | SAssert of sfexpr
 
 (******************************************************************
  * parse : string -> prog option
