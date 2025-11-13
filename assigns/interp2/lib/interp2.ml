@@ -1,7 +1,8 @@
 open Utils
 
 (******************************************************************
- * 重新导出 ty / expr / sfexpr 类型，让构造器在 Interp2 中也可见
+ * 重新导出 ty / sfexpr / toplet / prog / expr 类型，
+ * 让构造器在 Interp2 中也可见
  ******************************************************************)
 
 type ty = Utils.ty =
@@ -9,24 +10,6 @@ type ty = Utils.ty =
   | BoolTy
   | UnitTy
   | FunTy of ty * ty
-
-type expr = Utils.expr =
-  | Unit
-  | Bool of bool
-  | Num of int
-  | Var of string
-  | If of expr * expr * expr
-  | Bop of bop * expr * expr
-  | Fun of string * ty * expr
-  | App of expr * expr
-  | Let of {
-      is_rec : bool;
-      name : string;
-      ty : ty;
-      binding : expr;
-      body : expr;
-    }
-  | Assert of expr
 
 type sfexpr = Utils.sfexpr =
   | SUnit
@@ -49,6 +32,35 @@ type sfexpr = Utils.sfexpr =
   | SIf of sfexpr * sfexpr * sfexpr
   | SBop of bop * sfexpr * sfexpr
   | SAssert of sfexpr
+
+type toplet = Utils.toplet =
+  {
+    is_rec : bool;
+    name : string;
+    args : (string * ty) list;
+    ty : ty;
+    binding : sfexpr;
+  }
+
+type prog = Utils.prog
+
+type expr = Utils.expr =
+  | Unit
+  | Bool of bool
+  | Num of int
+  | Var of string
+  | If of expr * expr * expr
+  | Bop of bop * expr * expr
+  | Fun of string * ty * expr
+  | App of expr * expr
+  | Let of {
+      is_rec : bool;
+      name : string;
+      ty : ty;
+      binding : expr;
+      body : expr;
+    }
+  | Assert of expr
 
 (******************************************************************
  * parse : string -> prog option
