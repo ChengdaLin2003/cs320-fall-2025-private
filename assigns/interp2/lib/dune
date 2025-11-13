@@ -1,7 +1,3 @@
-(library
- (name interp2)
- (modules :standard)
- (wrapped false))
-
-(ocamllex (modules lexer))
-(menhir   (modules parser))
+(library (name interp2))
+(menhir (modules parser))
+(ocamllex lexer)

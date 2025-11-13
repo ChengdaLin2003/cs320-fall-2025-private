@@ -1,98 +1,109 @@
 %{
 open Utils
-
-(* 只保留柯里化 Fun 的 helper；不要再构造函数类型 *)
-let fun_chain args body =
-  List.fold_right (fun (x,t) acc -> Fun (x,t,acc)) args body
 %}
 
-%token LET REC IN IF THEN ELSE FUN TRUE FALSE ASSERT
-%token INTKW BOOLKW UNITKW MODKW
-%token PLUS MINUS STAR SLASH LT LTE GT GTE EQ NEQ AND OR ARROW
-%token LPAREN RPAREN COLON
 %token <int> NUM
 %token <string> VAR
+%token TRUE
+%token FALSE
+%token ASSERT
+%token LET
+%token REC
+%token EQ
+%token IN
+%token COLON
+%token LPAREN
+%token RPAREN
+%token IF
+%token THEN
+%token ELSE
+%token FUN
+%token ARROW
+
+%token ADD
+%token SUB
+%token MUL
+%token DIV
+%token MOD
+%token LT
+%token LTE
+%token GT
+%token GTE
+%token NEQ
+%token AND
+%token OR
+
+%token INT
+%token BOOL
+%token UNIT
+
 %token EOF
 
-%start parse
-%type <prog> parse
+%right OR
+%right AND
+%left LT LTE GT GTE EQ NEQ
+%left ADD SUB
+%left MUL DIV MOD
+%right ARROW
+
+%start <Utils.prog> prog
 
 %%
 
-parse:
-  | EOF                                { [] }
-  | toplet_list EOF                    { $1 }
+prog:
+  | lets=toplet*; EOF { lets }
 
-toplet_list:
-  | toplet                             { [$1] }
-  | toplet toplet_list                 { $1 :: $2 }
-
-(* 顶层：let [rec] f (x1:t1) ... (xk:tk) : tr = e *)
 toplet:
-  | LET rec_opt VAR arg_list_opt COLON ty EQ expr
-      { { is_rec = $2; name = $3; args = $4; ann = $6; body = $8 } }
-
-rec_opt:
-  | REC                                { true }
-  |                                    { false }
-
-arg_list_opt:
-  |                                    { [] }
-  | arg arg_list_opt                   { $1 :: $2 }
+  | LET; is_rec=REC?; name=VAR; args=arg*; COLON; ty=ty; EQ; binding=expr
+    {
+      let is_rec = Option.is_some is_rec in
+      {is_rec;name;args;ty;binding}
+    }
 
 arg:
-  | LPAREN VAR COLON ty RPAREN         { ($2, $4) }
+  | LPAREN; x=VAR; COLON; ty=ty; RPAREN { x, ty }
 
 ty:
-  | INTKW                              { TInt }
-  | BOOLKW                             { TBool }
-  | UNITKW                             { TUnit }
-  | ty ARROW ty                        { TFun ($1, $3) }
-  | LPAREN ty RPAREN                   { $2 }
+  | INT { IntTy }
+  | BOOL { BoolTy }
+  | UNIT { UnitTy }
+  | t1=ty; ARROW; t2=ty { FunTy (t1, t2) }
+  | LPAREN; ty=ty; RPAREN { ty }
 
 expr:
-  (* let [rec] f (x1:t1)...(xk:tk) : tr = e1 in e2
-     这里我们：
-       - 把 (x1:t1)...(xk:tk) 柯里化成 Fun 链
-       - 但类型字段直接用注解 $6（tr），不再自己构造箭头类型
-  *)
-  | LET rec_opt VAR arg_list_opt COLON ty EQ expr IN expr
-      { let fun_e = fun_chain $4 $8 in
-        if $2 then LetRec ($3, $6, fun_e, $10)
-        else       Let    ($3, $6, fun_e, $10) }
+  | LET; is_rec=REC?; name=VAR; args=arg*; COLON; ty=ty; EQ; binding=expr; IN; body=expr
+    {
+      let is_rec = Option.is_some is_rec in
+      SLet {is_rec;name;args;ty;binding;body}
+    }
+  | IF; e1=expr; THEN; e2=expr; ELSE; e3=expr { SIf (e1, e2, e3) }
+  | FUN; args=arg+; ARROW; body=expr { SFun {args;body} }
+  | e = expr2 { e }
 
-  | IF expr THEN expr ELSE expr        { If ($2, $4, $6) }
+%inline bop:
+  | ADD { Add }
+  | SUB { Sub }
+  | MUL { Mul }
+  | DIV { Div }
+  | MOD { Mod }
+  | LT { Lt }
+  | LTE { Lte }
+  | GT { Gt }
+  | GTE { Gte }
+  | EQ { Eq }
+  | NEQ { Neq }
+  | AND { And }
+  | OR { Or }
 
-  | FUN arg arg_list_opt ARROW expr
-      { fun_chain ($2 :: $3) $5 }
+expr2:
+  | e1=expr2; op=bop; e2=expr2 { SBop (op, e1, e2) }
+  | ASSERT; e=expr3 { SAssert e }
+  | es=expr3+ { SApp es }
 
-  | bop_expr                           { $1 }
-
-bop_expr:
-  | bop_expr PLUS bop_expr             { Bop (Add, $1, $3) }
-  | bop_expr MINUS bop_expr            { Bop (Sub, $1, $3) }
-  | bop_expr STAR bop_expr             { Bop (Mul, $1, $3) }
-  | bop_expr SLASH bop_expr            { Bop (Div, $1, $3) }
-  | bop_expr MODKW bop_expr            { Bop (Mod, $1, $3) }
-  | bop_expr LT bop_expr               { Bop (Lt, $1, $3) }
-  | bop_expr LTE bop_expr              { Bop (Lte, $1, $3) }
-  | bop_expr GT bop_expr               { Bop (Gt, $1, $3) }
-  | bop_expr GTE bop_expr              { Bop (Gte, $1, $3) }
-  | bop_expr EQ bop_expr               { Bop (Eq, $1, $3) }
-  | bop_expr NEQ bop_expr              { Bop (Neq, $1, $3) }
-  | bop_expr AND bop_expr              { Bop (And, $1, $3) }
-  | bop_expr OR bop_expr               { Bop (Or, $1, $3) }
-  | app_expr                           { $1 }
-
-app_expr:
-  | app_expr simple_expr               { App ($1, $2) }
-  | ASSERT simple_expr                 { Assert $2 }
-  | simple_expr                        { $1 }
-
-simple_expr:
-  | LPAREN expr RPAREN                 { $2 }
-  | TRUE                               { True }
-  | FALSE                              { False }
-  | UNITKW                             { Unit }
-  | NUM                                { Num $1 }
-  | VAR                                { Var $1 }
+expr3:
+  | LPAREN; RPAREN { SUnit }
+  | TRUE { SBool true }
+  | FALSE { SBool false }
+  | n = NUM { SNum n }
+  | x = VAR { SVar x }
+  | LPAREN; e = expr; RPAREN { e }

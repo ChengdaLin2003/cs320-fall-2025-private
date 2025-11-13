@@ -1,60 +1,122 @@
-(* ---------- Binary operators ---------- *)
+type ty =
+  | IntTy
+  | BoolTy
+  | UnitTy
+  | FunTy of ty * ty
+
+let string_of_ty =
+  let rec go ty =
+    match ty with
+    | IntTy -> "int"
+    | BoolTy -> "bool"
+    | UnitTy -> "unit"
+    | FunTy (t1, t2) -> go' t1 ^ " -> " ^ go t2
+  and go' ty =
+    match ty with
+    | IntTy -> "int"
+    | BoolTy -> "bool"
+    | UnitTy -> "unit"
+    | FunTy (t1, t2)-> "(" ^ go (FunTy (t1, t2)) ^ ")"
+  in go
 
 type bop =
   | Add | Sub | Mul | Div | Mod
   | Lt | Lte | Gt | Gte | Eq | Neq
   | And | Or
 
-(* ---------- Types ---------- *)
+let string_of_bop op =
+  let go op =
+    match op with
+    | Add -> "+"
+    | Sub -> "-"
+    | Mul -> "*"
+    | Div -> "/"
+    | Mod -> "mod"
+    | Lt -> "<"
+    | Lte -> "<="
+    | Gt -> ">"
+    | Gte -> ">="
+    | Eq -> "="
+    | Neq -> "<>"
+    | And -> "&&"
+    | Or -> "||"
+  in "(" ^ go op ^ ")"
 
-type ty =
-  | TInt
-  | TBool
-  | TUnit
-  | TFun of ty * ty
+type sfexpr =
+  | SUnit
+  | SBool of bool
+  | SNum of int
+  | SVar of string
+  | SFun of {
+      args : (string * ty) list;
+      body : sfexpr;
+    }
+  | SApp of sfexpr list
+  | SLet of {
+      is_rec : bool;
+      name : string;
+      args : (string * ty) list;
+      ty : ty;
+      binding : sfexpr;
+      body : sfexpr;
+    }
+  | SIf of sfexpr * sfexpr * sfexpr
+  | SBop of bop * sfexpr * sfexpr
+  | SAssert of sfexpr
 
-(* ---------- Core expressions (typed AST) ---------- *)
-
-type expr =
-  | Unit
-  | True
-  | False
-  | Num of int
-  | Var of string
-  | Let    of string * ty * expr * expr  (* let x : t = e1 in e2 *)
-  | LetRec of string * ty * expr * expr  (* let rec f : t = e1 in e2 *)
-  | If of expr * expr * expr
-  | Fun of string * ty * expr            (* fun (x:t) -> e *)
-  | App of expr * expr
-  | Bop of bop * expr * expr
-  | Assert of expr
-
-(* ---------- Surface toplevel declarations ---------- *)
-
-type toplet = {
-  is_rec : bool;               (* let 或 let rec *)
-  name   : string;             (* 函数名 *)
-  args   : (string * ty) list; (* 参数 (x1:t1) ... (xk:tk) *)
-  ann    : ty;                 (* 返回类型注解 *)
-  body   : expr;               (* 函数体 (expr) *)
-}
+type toplet =
+  {
+    is_rec : bool;
+    name : string;
+    args : (string * ty) list;
+    ty : ty;
+    binding : sfexpr;
+  }
 
 type prog = toplet list
 
-(* ---------- Runtime values, environments ---------- *)
+type expr =
+  | Unit
+  | Bool of bool
+  | Num of int
+  | Var of string
+  | If of expr * expr * expr
+  | Bop of bop * expr * expr
+  | Fun of string * ty * expr
+  | App of expr * expr
+  | Let of {
+      is_rec : bool;
+      name : string;
+      ty : ty;
+      binding : expr;
+      body : expr;
+    }
+  | Assert of expr
 
-type env  = (string * value) list
-and value =
+module Env = Map.Make(String)
+
+type value =
   | VUnit
   | VBool of bool
-  | VNum  of int
-  | VClos of env * string option * expr
+  | VNum of int
+  | VClos of {
+      arg: string;
+      body: expr;
+      env : dyn_env;
+      name: string option
+    }
 
-type tenv = (string * ty) list
+and dyn_env = value Env.t
 
-(* ---------- Static / dynamic errors ---------- *)
+let string_of_value = function
+  | VUnit -> "()"
+  | VBool true -> "true"
+  | VBool false -> "false"
+  | VNum n -> string_of_int n
+  | VClos _ -> "<fun>"
 
 type error =
+  | ParseErr
   | UnknownVar of string
   | IfTyErr of ty * ty
   | IfCondTyErr of ty
@@ -65,51 +127,78 @@ type error =
   | LetTyErr of ty * ty
   | LetRecErr of string
   | AssertTyErr of ty
-  | ParseFail
-
-exception DivByZero
-exception AssertFail
-
-(* ---------- Pretty-printers (for main/tests) ---------- *)
-
-let rec string_of_ty = function
-  | TInt -> "int"
-  | TBool -> "bool"
-  | TUnit -> "unit"
-  | TFun (t1, t2) ->
-      "(" ^ string_of_ty t1 ^ " -> " ^ string_of_ty t2 ^ ")"
-
-let string_of_value = function
-  | VUnit -> "()"
-  | VBool b -> string_of_bool b
-  | VNum n -> string_of_int n
-  | VClos _ -> "<fun>"
-
-let string_of_bop = function
-  | Add -> "Add" | Sub -> "Sub" | Mul -> "Mul" | Div -> "Div" | Mod -> "Mod"
-  | Lt -> "Lt" | Lte -> "Lte" | Gt -> "Gt" | Gte -> "Gte"
-  | Eq -> "Eq" | Neq -> "Neq" | And -> "And" | Or -> "Or"
 
 let string_of_error = function
-  | UnknownVar x ->
-      "UnknownVar(" ^ x ^ ")"
-  | IfTyErr (t1,t2) ->
-      "IfTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
-  | IfCondTyErr t ->
-      "IfCondTyErr(" ^ string_of_ty t ^ ")"
-  | OpTyErrL (op,t1,t2) ->
-      "OpTyErrL(" ^ string_of_bop op ^ "," ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
-  | OpTyErrR (op,t1,t2) ->
-      "OpTyErrR(" ^ string_of_bop op ^ "," ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
-  | FunArgTyErr (t1,t2) ->
-      "FunArgTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
-  | FunAppTyErr t ->
-      "FunAppTyErr(" ^ string_of_ty t ^ ")"
-  | LetTyErr (t1,t2) ->
-      "LetTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
-  | LetRecErr f ->
-      "LetRecErr(" ^ f ^ ")"
-  | AssertTyErr t ->
-      "AssertTyErr(" ^ string_of_ty t ^ ")"
-  | ParseFail ->
-      "ParseFail"
+  | ParseErr -> "parse error"
+  | UnknownVar x -> "Unbound value " ^ x
+  | IfTyErr (then_ty, else_ty) ->
+     String.concat " "
+       [
+         "else-case of if-expression has type";
+         string_of_ty else_ty;
+         "but an expression was expected of type";
+         string_of_ty then_ty;
+       ]
+  | IfCondTyErr ty ->
+     String.concat " "
+       [
+         "condition of if-expression has type";
+         string_of_ty ty;
+         "but an expression was expected of type bool";
+       ]
+  | OpTyErrL (op, t1, t2) ->
+     String.concat " "
+       [
+         "left argument of operator";
+         string_of_bop op;
+         "has type";
+         string_of_ty t2;
+         "but an expression was expected of type";
+         string_of_ty t1;
+       ]
+  | OpTyErrR (op, t1, t2) ->
+     String.concat " "
+       [
+         "right argument of operator";
+         string_of_bop op;
+         "has type";
+         string_of_ty t2;
+         "but an expression was expected of type";
+         string_of_ty t1;
+       ]
+  | FunArgTyErr (t1, t2) ->
+     String.concat " "
+       [
+         "argument of function has type";
+         string_of_ty t2;
+         "but an expression was expected of type";
+         string_of_ty t1;
+       ]
+  | FunAppTyErr ty ->
+     String.concat " "
+       [
+         "an expression of type";
+         string_of_ty ty;
+         "is not a function; it cannot be applied";
+       ]
+  | LetTyErr (expected, actual) ->
+     String.concat " "
+       [
+         "let-defined value has type";
+         string_of_ty actual;
+         "but an expression was expected of type";
+         string_of_ty expected;
+       ]
+  | LetRecErr name ->
+     String.concat " "
+       [ "the recursive binding of"
+       ; name
+       ; "must have an argument"
+       ]
+  | AssertTyErr ty ->
+     String.concat " "
+       [
+         "argument of assert has type";
+         string_of_ty ty;
+         "but an expression was expected of type bool";
+       ]
