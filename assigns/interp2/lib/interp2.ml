@@ -1,5 +1,8 @@
 open Utils
 
+(* 让 Env 模块在 Interp2 中也可见 *)
+module Env = Utils.Env
+
 (******************************************************************
  * 重新导出 ty / error / sfexpr / toplet / prog / expr 类型，
  * 让构造器在 Interp2 中也可见
@@ -198,8 +201,6 @@ let desugar (p : prog) : expr =
   match p with
   | [] -> Unit
   | _  ->
-      (* prog 在 Utils 里实际上是 toplet list；
-         在这里我们只用 List 操作就行。 *)
       let last_name = (List.hd (List.rev p)).name in
       let ret = Var last_name in
       List.fold_right desugar_toplet p ret
