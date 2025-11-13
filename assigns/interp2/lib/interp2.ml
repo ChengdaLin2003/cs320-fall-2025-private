@@ -1,6 +1,5 @@
 open Utils
 
-(* 让 Env 模块在 Interp2 中也可见（grader 会直接用 Env） *)
 module Env = Utils.Env
 
 (******************************************************************
@@ -57,8 +56,6 @@ type toplet = Utils.toplet =
     ty : ty;
     binding : sfexpr;
   }
-
-(* prog 在 Utils 的接口里是抽象的；这里做别名就够了 *)
 type prog = Utils.prog
 
 type expr = Utils.expr =
@@ -339,10 +336,6 @@ let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
 
 let type_of (e : expr) : (ty, error) result =
   type_of_with empty_env e
-
-(******************************************************************
- * eval / interp 先留 stub（如果作业不要求就不用实现）
- ******************************************************************)
 
 let eval (_e : expr) : value =
   failwith "eval: TODO"
