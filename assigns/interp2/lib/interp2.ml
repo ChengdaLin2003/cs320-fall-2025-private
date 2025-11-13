@@ -1,7 +1,7 @@
 open Utils
 
 (******************************************************************
- * 重新导出 ty / sfexpr / toplet / prog / expr 类型，
+ * 重新导出 ty / error / sfexpr / toplet / prog / expr 类型，
  * 让构造器在 Interp2 中也可见
  ******************************************************************)
 
@@ -10,6 +10,19 @@ type ty = Utils.ty =
   | BoolTy
   | UnitTy
   | FunTy of ty * ty
+
+type error = Utils.error =
+  | ParseErr
+  | UnknownVar of string
+  | IfTyErr of ty * ty
+  | IfCondTyErr of ty
+  | OpTyErrL of bop * ty * ty
+  | OpTyErrR of bop * ty * ty
+  | FunArgTyErr of ty * ty
+  | FunAppTyErr of ty
+  | LetTyErr of ty * ty
+  | LetRecErr of string
+  | AssertTyErr of ty
 
 type sfexpr = Utils.sfexpr =
   | SUnit
@@ -42,6 +55,7 @@ type toplet = Utils.toplet =
     binding : sfexpr;
   }
 
+(* prog 在 Utils 的接口里是抽象的；这里做一个别名就可以了 *)
 type prog = Utils.prog
 
 type expr = Utils.expr =
@@ -131,13 +145,10 @@ let rec desugar_sf (e : sfexpr) : expr =
   | SVar x       -> Var x
 
   | SFun { args; body } ->
-      (* fun (x1:t1) ... (xk:tk) -> body
-         ==> Fun(x1,t1, Fun(x2,t2, ... body')) *)
       let body_e = desugar_sf body in
       curry_fun args body_e
 
   | SApp lst ->
-      (* SApp [f; a1; a2; ...] 变成 ((f a1) a2) ... *)
       (match lst with
        | [] -> failwith "desugar_sf: empty SApp"
        | f :: args ->
@@ -161,12 +172,6 @@ let rec desugar_sf (e : sfexpr) : expr =
       Assert e1'
 
   | SLet { is_rec; name; args; ty; binding; body } ->
-      (* let[rec] f (x1:t1)...(xk:tk) : ty = binding in body
-         ==>
-         let[rec] f : t1 -> ... -> tk -> ty =
-           fun (x1:t1)...(xk:tk) -> binding'
-         in body'
-       *)
       let binding_e = curry_fun args (desugar_sf binding) in
       let fun_ty = fun_ty_of_args args ty in
       let body_e = desugar_sf body in
@@ -193,6 +198,8 @@ let desugar (p : prog) : expr =
   match p with
   | [] -> Unit
   | _  ->
+      (* prog 在 Utils 里实际上是 toplet list；
+         在这里我们只用 List 操作就行。 *)
       let last_name = (List.hd (List.rev p)).name in
       let ret = Var last_name in
       List.fold_right desugar_toplet p ret
@@ -209,7 +216,6 @@ let empty_env : ty_env = Env.empty
 let lookup (env : ty_env) (x : string) : (ty, error) result =
   try Ok (Env.find x env) with Not_found -> Error (UnknownVar x)
 
-(* 真正干活的递归函数 *)
 let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
   match e with
   | Unit -> Ok UnitTy
@@ -252,7 +258,6 @@ let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
                     else if t2 <> BoolTy then Error (OpTyErrR (op, BoolTy, t2))
                     else Ok BoolTy
                 | Eq | Neq ->
-                    (* 简单起见：只要两边同型，就返回 bool *)
                     if t1 <> t2 then Error (OpTyErrR (op, t1, t2))
                     else Ok BoolTy
                 end
@@ -286,7 +291,6 @@ let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
 
   | Let { is_rec; name; ty = annot_ty; binding; body } ->
       if not is_rec then
-        (* 非递归 let：先算 binding 类型，再和注解比 *)
         begin
           match type_of_with env binding with
           | Error e -> Error e
@@ -298,7 +302,6 @@ let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
                 type_of_with env' body
         end
       else
-        (* 递归 let：binding 必须是 Fun，否则 LetRecErr *)
         begin
           match binding with
           | Fun (_, _, _) ->
@@ -325,12 +328,11 @@ let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
             else Ok UnitTy
       end
 
-(* 对外暴露的 type_of：从空环境开始 *)
 let type_of (e : expr) : (ty, error) result =
   type_of_with empty_env e
 
 (******************************************************************
- * 解释器部分先留 stub；如果后续有 eval / interp 测试再一起补
+ * eval / interp 先留 stub
  ******************************************************************)
 
 let eval (_e : expr) : value =
