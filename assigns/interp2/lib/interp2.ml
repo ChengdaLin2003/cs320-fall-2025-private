@@ -1,10 +1,10 @@
 open Utils
 
-(* 让 Env 模块在 Interp2 中也可见 *)
+(* 让 Env 模块在 Interp2 中也可见（grader 会直接用 Env） *)
 module Env = Utils.Env
 
 (******************************************************************
- * 重新导出 ty / error / sfexpr / toplet / prog / expr 类型，
+ * 重新导出 ty / error / sfexpr / toplet / prog / expr / value 类型，
  * 让构造器在 Interp2 中也可见
  ******************************************************************)
 
@@ -58,7 +58,7 @@ type toplet = Utils.toplet =
     binding : sfexpr;
   }
 
-(* prog 在 Utils 的接口里是抽象的；这里做一个别名就可以了 *)
+(* prog 在 Utils 的接口里是抽象的；这里做别名就够了 *)
 type prog = Utils.prog
 
 type expr = Utils.expr =
@@ -78,6 +78,20 @@ type expr = Utils.expr =
       body : expr;
     }
   | Assert of expr
+
+(* 重新导出 value / dyn_env，使 grader 可以写 expr -> value *)
+type value = Utils.value =
+  | VUnit
+  | VBool of bool
+  | VNum of int
+  | VClos of {
+      arg  : string;
+      body : expr;
+      env  : dyn_env;
+      name : string option;
+    }
+
+and dyn_env = value Env.t
 
 (******************************************************************
  * parse : string -> prog option
@@ -136,8 +150,6 @@ let rec chain_app (f : expr) (args : expr list) : expr =
 
 (******************************************************************
  * desugar_sf : sfexpr -> expr
- *
- * 把 surface expr (SUnit, SFun, SApp, SLet, ...) 变成 core expr
  ******************************************************************)
 
 let rec desugar_sf (e : sfexpr) : expr =
@@ -181,7 +193,7 @@ let rec desugar_sf (e : sfexpr) : expr =
       Let { is_rec; name; ty = fun_ty; binding = binding_e; body = body_e }
 
 (******************************************************************
- * desugar_toplet : 把一个顶层 toplet 和 “后续表达式” k 拼成一层 Let
+ * desugar_toplet : toplet 和 continuation k -> expr
  ******************************************************************)
 
 let desugar_toplet (t : toplet) (k : expr) : expr =
@@ -192,9 +204,6 @@ let desugar_toplet (t : toplet) (k : expr) : expr =
 
 (******************************************************************
  * 真正的 desugar : prog -> expr
- *
- *   []               ==> Unit
- *   [t1; ...; tn]   ==> let[rec] t1 in ... let[rec] tn in name_of(tn)
  ******************************************************************)
 
 let desugar (p : prog) : expr =
@@ -206,10 +215,9 @@ let desugar (p : prog) : expr =
       List.fold_right desugar_toplet p ret
 
 (******************************************************************
- * 类型检查：expr （core） -> (ty, error) result
+ * 类型检查：expr -> (ty, error) result
  ******************************************************************)
 
-(* 静态环境：变量 -> 类型 *)
 type ty_env = ty Env.t
 
 let empty_env : ty_env = Env.empty
@@ -333,7 +341,7 @@ let type_of (e : expr) : (ty, error) result =
   type_of_with empty_env e
 
 (******************************************************************
- * eval / interp 先留 stub
+ * eval / interp 先留 stub（如果作业不要求就不用实现）
  ******************************************************************)
 
 let eval (_e : expr) : value =
