@@ -2,7 +2,7 @@ open OUnit2
 open Utils
 open Interp2
 
-(* 简单地把 expr 打印成字符串，方便调试失败信息 *)
+(* 把 expr 打印出来，方便调试 *)
 let rec string_of_expr = function
   | Unit -> "Unit"
   | True -> "True"
@@ -50,11 +50,9 @@ let desugar_tests =
         let got = desugar prog in
         assert_expr_equal Unit got);
 
-      (* 一个非递归的顶层函数：
-         let f (x:int) : int = x in ...
-         desugar 之后应当变成：
-         let f : int -> int = fun (x:int) -> x in f
-      *)
+      (* 单个非递归顶层：
+         let f (x:int) : int = x
+         我们的 desugar 只保留 ann（= TInt），不会自己做 t1->t2 箭头 *)
       "single non-rec toplet" >:: (fun _ ->
         let top : toplet =
           {
@@ -69,7 +67,8 @@ let desugar_tests =
         let got  = desugar prog in
         let expected =
           Let ("f",
-               TFun (TInt, TInt),
+               (* 类型字段就是 ann = TInt *)
+               TInt,
                Fun ("x", TInt, Var "x"),
                Var "f")
         in
@@ -78,11 +77,7 @@ let desugar_tests =
       (* 两个顶层定义：
          let g (y:int) : int = y + 1
          let rec f (x:int) : int = x
-         期望 desugar 结果是：
-         let g : int -> int = fun (y:int) -> y + 1 in
-         let rec f : int -> int = fun (x:int) -> x in
-         f
-      *)
+         desugar 后类型字段仍然是 ann = TInt，而不是 (int -> int) *)
       "two toplets nested" >:: (fun _ ->
         let top_g : toplet =
           {
@@ -106,10 +101,10 @@ let desugar_tests =
         let got = desugar prog in
         let expected =
           Let ("g",
-               TFun (TInt, TInt),
+               TInt,
                Fun ("y", TInt, Bop (Add, Var "y", Num 1)),
                LetRec ("f",
-                       TFun (TInt, TInt),
+                       TInt,
                        Fun ("x", TInt, Var "x"),
                        Var "f"))
         in

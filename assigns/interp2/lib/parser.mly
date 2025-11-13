@@ -1,12 +1,9 @@
 %{
 open Utils
 
-(* helpers: 柯里化函数 & 箭头类型 *)
+(* 只保留柯里化 Fun 的 helper；不要再构造函数类型 *)
 let fun_chain args body =
   List.fold_right (fun (x,t) acc -> Fun (x,t,acc)) args body
-
-let arrow_ty args ret =
-  List.fold_right (fun (_,t) acc -> TFun (t, acc)) args ret
 %}
 
 %token LET REC IN IF THEN ELSE FUN TRUE FALSE ASSERT
@@ -55,13 +52,14 @@ ty:
 
 expr:
   (* let [rec] f (x1:t1)...(xk:tk) : tr = e1 in e2
-     这里直接反糖成本地的 Let / LetRec（带类型），
-     desugar 再负责处理顶层 prog -> expr 的反糖。 *)
+     这里我们：
+       - 把 (x1:t1)...(xk:tk) 柯里化成 Fun 链
+       - 但类型字段直接用注解 $6（tr），不再自己构造箭头类型
+  *)
   | LET rec_opt VAR arg_list_opt COLON ty EQ expr IN expr
       { let fun_e = fun_chain $4 $8 in
-        let ann'  = arrow_ty $4 $6 in
-        if $2 then LetRec ($3, ann', fun_e, $10)
-        else       Let    ($3, ann', fun_e, $10) }
+        if $2 then LetRec ($3, $6, fun_e, $10)
+        else       Let    ($3, $6, fun_e, $10) }
 
   | IF expr THEN expr ELSE expr        { If ($2, $4, $6) }
 
