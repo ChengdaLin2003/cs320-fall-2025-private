@@ -1,80 +1,54 @@
 {
-  open Parser
-
-  (* ------------------------------------------------------ *)
-  (* Keyword recognition: returns Some <token> if the       *)
-  (* identifier matches a reserved word, otherwise None.    *)
-  (* ------------------------------------------------------ *)
-  let keyword = function
-    | "let"   -> Some LET
-    | "in"    -> Some IN
-    | "if"    -> Some IF
-    | "then"  -> Some THEN
-    | "else"  -> Some ELSE
-    | "fun"   -> Some FUN
-    | "rec"   -> Some REC
-    | "true"  -> Some TRUE
-    | "false" -> Some FALSE
-    | _ -> None
+open Parser
 }
 
-(* ------------------------------------------------------ *)
-(* Main lexing rule: read successive tokens from input.   *)
-(* The first matching pattern is chosen, so order matters *)
-(* (multi-character symbols must appear before single ones). *)
-(* ------------------------------------------------------ *)
-rule read = parse
+rule token = parse
+  | [' ' '\t' '\r' '\n']     { token lexbuf }
+  | "(*"                     { comment 1 lexbuf; token lexbuf }  (* 嵌套注释 *)
 
-  (* ---------- Whitespace and Comments ---------- *)
-  | [' ' '\t' '\r' '\n']+        { read lexbuf }    (* Skip all whitespace *)
-  | "//" [^'\n']*               { read lexbuf }     (* Single-line comments: '//' ... newline *)
-  | "(*"                        { comment 1 lexbuf }(* Multi-line / nested comments start *)
+  | "let"                    { LET }
+  | "rec"                    { REC }
+  | "in"                     { IN }
+  | "if"                     { IF }
+  | "then"                   { THEN }
+  | "else"                   { ELSE }
+  | "fun"                    { FUN }
+  | "true"                   { TRUE }
+  | "false"                  { FALSE }
+  | "assert"                 { ASSERT }
 
-  (* ---------- Multi-character operators ---------- *)
-  | "||"                        { OR }
-  | "&&"                        { AND }
-  | "<="                        { LE }
-  | ">="                        { GE }
-  | "<>"                        { NEQ }
-  | "->"                        { ARROW }
-  | "()"                        { UNIT }
+  | "int"                    { INTKW }
+  | "bool"                   { BOOLKW }
+  | "unit"                   { UNITKW }
+  | "mod"                    { MODKW }
 
-  (* ---------- Single-character operators / punctuation ---------- *)
-  | "<"                         { LT }
-  | ">"                         { GT }
-  | "+"                         { PLUS }
-  | "-"                         { MINUS }
-  | "*"                         { STAR }
-  | "/"                         { SLASH }
-  | "="                         { EQ }
-  | "("                         { LPAREN }
-  | ")"                         { RPAREN }
+  | "->"                     { ARROW }
+  | '('                      { LPAREN }
+  | ')'                      { RPAREN }
+  | ':'                      { COLON }
 
-  (* ---------- Numeric literals ---------- *)
-  | ['0'-'9']+ as n             { NUM (int_of_string n) }
-      (* Only non-negative digits here; unary '-' handled in parser. *)
+  | '='                      { EQ }
+  | "<>"                     { NEQ }
+  | "<="                     { LTE }
+  | "<"                      { LT }
+  | ">="                     { GTE }
+  | ">"                      { GT }
+  | "&&"                     { AND }
+  | "||"                     { OR }
 
-  (* ---------- Identifiers and Keywords ---------- *)
-  | "mod"                       { MOD }
-  | ['a'-'z' '_']['a'-'z' 'A'-'Z' '0'-'9' '_' '\'']* as id {
-      match keyword id with
-      | Some kw -> kw          (* reserved keyword *)
-      | None    -> VAR id      (* otherwise a variable name *)
-    }
+  | '+'                      { PLUS }
+  | '-'                      { MINUS }
+  | '*'                      { STAR }
+  | '/'                      { SLASH }
 
-  (* ---------- End of input ---------- *)
-  | eof                         { EOF }
+  | ['0'-'9']+ as n          { NUM (int_of_string n) }
+  | ['a'-'z''A'-'Z''_']['a'-'z''A'-'Z''0'-'9''_']* as v { VAR v }
 
-  (* ---------- Catch-all: skip any unrecognized character ---------- *)
-  | _                           { read lexbuf }
+  | eof                      { EOF }
+  | _                        { failwith "Unrecognized character" }
 
-
-(* ------------------------------------------------------ *)
-(* Nested comment handling: supports (* ... (* ... *) ... *) *)
-(* ------------------------------------------------------ *)
 and comment depth = parse
-  | "(*"                        { comment (depth + 1) lexbuf }  (* new nested level *)
-  | "*)"                        { if depth = 1 then read lexbuf (* leave last level *)
-                                  else comment (depth - 1) lexbuf }
-  | eof                         { failwith "Unterminated comment" }
-  | _                           { comment depth lexbuf }         (* consume anything inside *)
+  | "(*"  { comment (depth + 1) lexbuf }
+  | "*)"  { if depth = 1 then () else comment (depth - 1) lexbuf }
+  | eof   { failwith "Unclosed comment" }
+  | _     { comment depth lexbuf }

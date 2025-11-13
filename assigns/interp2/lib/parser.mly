@@ -1,90 +1,100 @@
 %{
 open Utils
 
-(* Helper: call-by-value fix-combinator as an AST.
-   fix = fun f -> (fun x -> f (fun v -> x x v)) (fun x -> f (fun v -> x x v)) *)
-let fix_expr : expr =
-  let f = "f" and x = "x" and v = "v" in
-  let inner = Fun (v, App (App (Var x, Var x), Var v)) in
-  let fx = Fun (x, App (Var f, inner)) in
-  Fun (f, App (fx, fx))
+(* helpers: 柯里化函数 & 箭头类型 *)
+let fun_chain args body =
+  List.fold_right (fun (x,t) acc -> Fun (x,t,acc)) args body
+
+let arrow_ty args ret =
+  List.fold_right (fun (_,t) acc -> TFun (t, acc)) args ret
 %}
 
-(* ---------- Tokens ---------- *)
+%token LET REC IN IF THEN ELSE FUN TRUE FALSE ASSERT
+%token INTKW BOOLKW UNITKW MODKW
+%token PLUS MINUS STAR SLASH LT LTE GT GTE EQ NEQ AND OR ARROW
+%token LPAREN RPAREN COLON
 %token <int> NUM
 %token <string> VAR
-%token TRUE FALSE
-%token LET IN IF THEN ELSE REC
-%token FUN ARROW
-%token PLUS MINUS STAR SLASH MOD
-%token LT LE GT GE EQ NEQ
-%token AND OR
-%token LPAREN RPAREN UNIT
 %token EOF
 
-(* ---------- Entry ---------- *)
-%start prog
-%type <expr> prog
-
-(* ---------- Precedence (lowest first) ---------- *)
-%left OR
-%left AND
-%left LT LE GT GE EQ NEQ
-%left PLUS MINUS
-%left STAR SLASH MOD
-%left APP
+%start parse
+%type <prog> parse
 
 %%
-prog:
-  expr EOF { $1 }
 
-/* Expression with infix operators; precedence controlled above */
+parse:
+  | EOF                                { [] }
+  | toplet_list EOF                    { $1 }
+
+toplet_list:
+  | toplet                             { [$1] }
+  | toplet toplet_list                 { $1 :: $2 }
+
+(* 顶层：let [rec] f (x1:t1) ... (xk:tk) : tr = e *)
+toplet:
+  | LET rec_opt VAR arg_list_opt COLON ty EQ expr
+      { { is_rec = $2; name = $3; args = $4; ann = $6; body = $8 } }
+
+rec_opt:
+  | REC                                { true }
+  |                                    { false }
+
+arg_list_opt:
+  |                                    { [] }
+  | arg arg_list_opt                   { $1 :: $2 }
+
+arg:
+  | LPAREN VAR COLON ty RPAREN         { ($2, $4) }
+
+ty:
+  | INTKW                              { TInt }
+  | BOOLKW                             { TBool }
+  | UNITKW                             { TUnit }
+  | ty ARROW ty                        { TFun ($1, $3) }
+  | LPAREN ty RPAREN                   { $2 }
+
 expr:
-  | expr OR expr            { Bop (Or,  $1, $3) }
-  | expr AND expr           { Bop (And, $1, $3) }
-  | expr LT expr            { Bop (Lt,  $1, $3) }
-  | expr LE expr            { Bop (Lte, $1, $3) }
-  | expr GT expr            { Bop (Gt,  $1, $3) }
-  | expr GE expr            { Bop (Gte, $1, $3) }
-  | expr EQ expr            { Bop (Eq,  $1, $3) }
-  | expr NEQ expr           { Bop (Neq, $1, $3) }
-  | expr PLUS expr          { Bop (Add, $1, $3) }
-  | expr MINUS expr         { Bop (Sub, $1, $3) }
-  | expr STAR expr          { Bop (Mul, $1, $3) }
-  | expr SLASH expr         { Bop (Div, $1, $3) }
-  | expr MOD expr           { Bop (Mod, $1, $3) }
-  | noninfix                { $1 }
+  (* let [rec] f (x1:t1)...(xk:tk) : tr = e1 in e2
+     这里直接反糖成本地的 Let / LetRec（带类型），
+     desugar 再负责处理顶层 prog -> expr 的反糖。 *)
+  | LET rec_opt VAR arg_list_opt COLON ty EQ expr IN expr
+      { let fun_e = fun_chain $4 $8 in
+        let ann'  = arrow_ty $4 $6 in
+        if $2 then LetRec ($3, ann', fun_e, $10)
+        else       Let    ($3, ann', fun_e, $10) }
 
-/* Non-infix forms bind most loosely */
-noninfix:
   | IF expr THEN expr ELSE expr        { If ($2, $4, $6) }
-  | LET VAR EQ expr IN expr            { Let ($2, $4, $6) }
-  | LET REC VAR EQ expr IN expr      { Let ($3, $5, $7) }
-  | LET REC VAR EQ FUN VAR ARROW expr IN expr
-        { Let ($3,
-                App (fix_expr,
-                     Fun ("\000self", Fun ($6, Let ($3, Var "\000self", $8)))) ,
-                $10) }
-  | FUN VAR ARROW expr                 { Fun ($2, $4) }
+
+  | FUN arg arg_list_opt ARROW expr
+      { fun_chain ($2 :: $3) $5 }
+
+  | bop_expr                           { $1 }
+
+bop_expr:
+  | bop_expr PLUS bop_expr             { Bop (Add, $1, $3) }
+  | bop_expr MINUS bop_expr            { Bop (Sub, $1, $3) }
+  | bop_expr STAR bop_expr             { Bop (Mul, $1, $3) }
+  | bop_expr SLASH bop_expr            { Bop (Div, $1, $3) }
+  | bop_expr MODKW bop_expr            { Bop (Mod, $1, $3) }
+  | bop_expr LT bop_expr               { Bop (Lt, $1, $3) }
+  | bop_expr LTE bop_expr              { Bop (Lte, $1, $3) }
+  | bop_expr GT bop_expr               { Bop (Gt, $1, $3) }
+  | bop_expr GTE bop_expr              { Bop (Gte, $1, $3) }
+  | bop_expr EQ bop_expr               { Bop (Eq, $1, $3) }
+  | bop_expr NEQ bop_expr              { Bop (Neq, $1, $3) }
+  | bop_expr AND bop_expr              { Bop (And, $1, $3) }
+  | bop_expr OR bop_expr               { Bop (Or, $1, $3) }
   | app_expr                           { $1 }
-  | primary                           { $1 }
 
-/* Application only chains ATOMs (no leading unary). */
 app_expr:
-  | app_expr atom %prec APP            { App ($1, $2) }
-  | atom                               { $1 }
+  | app_expr simple_expr               { App ($1, $2) }
+  | ASSERT simple_expr                 { Assert $2 }
+  | simple_expr                        { $1 }
 
-/* Atom excludes unary minus to avoid "1 (-2)"-style accidental application. */
-atom:
-  | NUM                                { Num $1 }
+simple_expr:
+  | LPAREN expr RPAREN                 { $2 }
   | TRUE                               { True }
   | FALSE                              { False }
-  | UNIT                               { Unit }
+  | UNITKW                             { Unit }
+  | NUM                                { Num $1 }
   | VAR                                { Var $1 }
-  | LPAREN expr RPAREN                 { $2 }
-
-/* Unary minus builds on atom and has higher precedence than infix, but cannot be a callee. */
-primary:
-  | MINUS atom                         { Bop (Sub, Num 0, $2) }
-  | atom                               { $1 }
-

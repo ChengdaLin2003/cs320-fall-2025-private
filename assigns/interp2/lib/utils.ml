@@ -1,72 +1,115 @@
-(* -------------------- Binary Operators -------------------- *)
-type bop =
-  | Add | Sub | Mul | Div | Mod              (* + - * / mod *)
-  | Lt | Lte | Gt | Gte | Eq | Neq           (* < <= > >= = <> *)
-  | And | Or                                  (* && || *)
+(* ---------- Binary operators ---------- *)
 
-(* -------------------- Abstract Syntax Tree -------------------- *)
+type bop =
+  | Add | Sub | Mul | Div | Mod
+  | Lt | Lte | Gt | Gte | Eq | Neq
+  | And | Or
+
+(* ---------- Types ---------- *)
+
+type ty =
+  | TInt
+  | TBool
+  | TUnit
+  | TFun of ty * ty
+
+(* ---------- Core expressions (typed AST) ---------- *)
+
 type expr =
   | Unit
-  | True | False
+  | True
+  | False
   | Num of int
   | Var of string
-  | Let of string * expr * expr              (* let x = e1 in e2 *)
-  | If of expr * expr * expr                 (* if c then t else f *)
-  | Fun of string * expr                     (* fun x -> e *)
-  | App of expr * expr                       (* e1 e2 *)
-  | Bop of bop * expr * expr                 (* e1 op e2 *)
+  | Let    of string * ty * expr * expr  (* let x : t = e1 in e2 *)
+  | LetRec of string * ty * expr * expr  (* let rec f : t = e1 in e2 *)
+  | If of expr * expr * expr
+  | Fun of string * ty * expr            (* fun (x:t) -> e *)
+  | App of expr * expr
+  | Bop of bop * expr * expr
+  | Assert of expr
 
-(* -------------------- Runtime Values -------------------- *)
-type value =
+(* ---------- Surface toplevel declarations ---------- *)
+
+type toplet = {
+  is_rec : bool;               (* let 或 let rec *)
+  name   : string;             (* 函数名 *)
+  args   : (string * ty) list; (* 参数 (x1:t1) ... (xk:tk) *)
+  ann    : ty;                 (* 返回类型注解 *)
+  body   : expr;               (* 函数体 (expr) *)
+}
+
+type prog = toplet list
+
+(* ---------- Runtime values, environments ---------- *)
+
+type env  = (string * value) list
+and value =
   | VUnit
   | VBool of bool
-  | VNum of int
-  | VFun of string * expr                    (* 函数值（闭包里仅形参与函数体） *)
+  | VNum  of int
+  | VClos of env * string option * expr
 
-(* -------------------- Errors -------------------- *)
+type tenv = (string * ty) list
+
+(* ---------- Static / dynamic errors ---------- *)
+
 type error =
   | UnknownVar of string
-  | InvalidArgs of bop
-  | InvalidIfCond
-  | InvalidApp
-  | DivByZero
+  | IfTyErr of ty * ty
+  | IfCondTyErr of ty
+  | OpTyErrL of bop * ty * ty
+  | OpTyErrR of bop * ty * ty
+  | FunArgTyErr of ty * ty
+  | FunAppTyErr of ty
+  | LetTyErr of ty * ty
+  | LetRecErr of string
+  | AssertTyErr of ty
   | ParseFail
 
-(* -------------------- Pretty-printers -------------------- *)
-let string_of_bop = function
-  | Add -> "+" | Sub -> "-" | Mul -> "*" | Div -> "/" | Mod -> "mod"
-  | Lt -> "<" | Lte -> "<=" | Gt -> ">" | Gte -> ">="
-  | Eq -> "=" | Neq -> "<>"
-  | And -> "&&" | Or -> "||"
+exception DivByZero
+exception AssertFail
 
-let rec string_of_expr = function
-  | Unit -> "()"
-  | True -> "true"
-  | False -> "false"
-  | Num n -> string_of_int n
-  | Var x -> x
-  | Let (x,e1,e2) ->
-      "let " ^ x ^ " = " ^ string_of_expr e1 ^ " in " ^ string_of_expr e2
-  | If (c,t,f) ->
-      "if " ^ string_of_expr c ^ " then " ^ string_of_expr t ^ " else " ^ string_of_expr f
-  | Fun (x,e) -> "(fun " ^ x ^ " -> " ^ string_of_expr e ^ ")"
-  | App (e1,e2) -> "(" ^ string_of_expr e1 ^ " " ^ string_of_expr e2 ^ ")"
-  | Bop (op,e1,e2) ->
-      "(" ^ string_of_expr e1 ^ " " ^ string_of_bop op ^ " " ^ string_of_expr e2 ^ ")"
+(* ---------- Pretty-printers (for main/tests) ---------- *)
+
+let rec string_of_ty = function
+  | TInt -> "int"
+  | TBool -> "bool"
+  | TUnit -> "unit"
+  | TFun (t1, t2) ->
+      "(" ^ string_of_ty t1 ^ " -> " ^ string_of_ty t2 ^ ")"
 
 let string_of_value = function
   | VUnit -> "()"
   | VBool b -> string_of_bool b
   | VNum n -> string_of_int n
-  | VFun _ -> "<fun>"
+  | VClos _ -> "<fun>"
+
+let string_of_bop = function
+  | Add -> "Add" | Sub -> "Sub" | Mul -> "Mul" | Div -> "Div" | Mod -> "Mod"
+  | Lt -> "Lt" | Lte -> "Lte" | Gt -> "Gt" | Gte -> "Gte"
+  | Eq -> "Eq" | Neq -> "Neq" | And -> "And" | Or -> "Or"
 
 let string_of_error = function
-  | UnknownVar x     -> "unknown variable: " ^ x
-  | InvalidArgs op   -> "invalid operands for operator " ^ string_of_bop op
-  | InvalidIfCond    -> "if condition is not a boolean"
-  | InvalidApp       -> "attempted to apply a non-function value"
-  | DivByZero        -> "division by zero"
-  | ParseFail        -> "parse failure"
-
-(* 顶层程序类型 *)
-type prog = expr
+  | UnknownVar x ->
+      "UnknownVar(" ^ x ^ ")"
+  | IfTyErr (t1,t2) ->
+      "IfTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
+  | IfCondTyErr t ->
+      "IfCondTyErr(" ^ string_of_ty t ^ ")"
+  | OpTyErrL (op,t1,t2) ->
+      "OpTyErrL(" ^ string_of_bop op ^ "," ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
+  | OpTyErrR (op,t1,t2) ->
+      "OpTyErrR(" ^ string_of_bop op ^ "," ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
+  | FunArgTyErr (t1,t2) ->
+      "FunArgTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
+  | FunAppTyErr t ->
+      "FunAppTyErr(" ^ string_of_ty t ^ ")"
+  | LetTyErr (t1,t2) ->
+      "LetTyErr(" ^ string_of_ty t1 ^ "," ^ string_of_ty t2 ^ ")"
+  | LetRecErr f ->
+      "LetRecErr(" ^ f ^ ")"
+  | AssertTyErr t ->
+      "AssertTyErr(" ^ string_of_ty t ^ ")"
+  | ParseFail ->
+      "ParseFail"
