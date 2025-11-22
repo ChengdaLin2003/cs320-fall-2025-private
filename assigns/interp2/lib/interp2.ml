@@ -5,7 +5,7 @@ exception DivByZero = Division_by_zero
 exception AssertFail
 
 (******************************************************************
- * 重新导出类型: ty / error / sfexpr / toplet / prog / expr / value
+ * 重新导出 ty / error / sfexpr / toplet / prog / expr / value 类型
  ******************************************************************)
 
 type ty = Utils.ty =
@@ -110,7 +110,7 @@ let string_of_value = Utils.string_of_value
 let string_of_error = Utils.string_of_error
 
 (******************************************************************
- * Helper: 构造函数类型
+ * Helpers: 构造函数类型 / 柯里化 / 应用串联
  ******************************************************************)
 
 let rec fun_ty_of_args (args : (string * ty) list) (ret_ty : ty) : ty =
@@ -118,21 +118,13 @@ let rec fun_ty_of_args (args : (string * ty) list) (ret_ty : ty) : ty =
   | [] -> ret_ty
   | (_, t) :: tl -> FunTy (t, fun_ty_of_args tl ret_ty)
 
-(******************************************************************
- * 柯里化 Fun
- ******************************************************************)
-
 let rec curry_fun (args : (string * ty) list) (body_e : expr) : expr =
   match args with
   | [] -> body_e
   | (x, ty) :: tl ->
       Fun (x, ty, curry_fun tl body_e)
 
-(******************************************************************
- * 左结合应用链
- ******************************************************************)
-
-let rec chain_app f args =
+let rec chain_app (f : expr) (args : expr list) : expr =
   match args with
   | [] -> f
   | a :: tl -> chain_app (App (f, a)) tl
@@ -141,7 +133,7 @@ let rec chain_app f args =
  * desugar sfexpr -> expr
  ******************************************************************)
 
-let rec desugar_sf e =
+let rec desugar_sf (e : sfexpr) : expr =
   match e with
   | SUnit -> Unit
   | SBool b -> Bool b
@@ -177,7 +169,7 @@ let rec desugar_sf e =
         body = desugar_sf body;
       }
 
-let desugar_toplet t k =
+let desugar_toplet (t : toplet) (k : expr) : expr =
   Let {
     is_rec = t.is_rec;
     name = t.name;
@@ -186,7 +178,7 @@ let desugar_toplet t k =
     body = k;
   }
 
-let desugar p =
+let desugar (p : prog) : expr =
   match p with
   | [] -> Unit
   | _ ->
@@ -199,14 +191,14 @@ let desugar p =
 
 type ty_env = ty Env.t
 
-let lookup env x =
+let lookup (env : ty_env) (x : string) : (ty, error) result =
   match Env.find_opt x env with
   | Some t -> Ok t
   | None -> Error (UnknownVar x)
 
-let empty_env = Env.empty
+let empty_ty_env : ty_env = Env.empty
 
-let rec type_of_with env e =
+let rec type_of_with (env : ty_env) (e : expr) : (ty, error) result =
   match e with
   | Unit -> Ok UnitTy
   | Bool _ -> Ok BoolTy
@@ -275,7 +267,7 @@ let rec type_of_with env e =
             else type_of_with (Env.add name ty env) body
         | Error e -> Error e
       ) else (
-        (* let rec: binding 必须是一个 function *)
+        (* let rec: 绑定必须是函数 *)
         match binding with
         | Fun _ ->
             let env' = Env.add name ty env in
@@ -294,10 +286,11 @@ let rec type_of_with env e =
       | Error e -> Error e
       end
 
-let type_of e = type_of_with empty_env e
+let type_of (e : expr) : (ty, error) result =
+  type_of_with empty_ty_env e
 
 (******************************************************************
- * Runtime evaluation (mp1 semantics)
+ * Evaluation（有环境的闭包 + let/let rec）
  ******************************************************************)
 
 let int_of_value = function
@@ -308,7 +301,7 @@ let bool_of_value = function
   | VBool b -> b
   | _ -> failwith "expected bool"
 
-let rec eval_with env e =
+let rec eval_with (env : dyn_env) (e : expr) : value =
   match e with
   | Unit -> VUnit
   | Bool b -> VBool b
@@ -323,22 +316,47 @@ let rec eval_with env e =
       else eval_with env f
 
   | Fun (x, _, body) ->
+      (* 普通函数：闭包里不带名字 *)
       VClos { arg = x; body; env; name = None }
 
   | App (e1, e2) ->
       let vf = eval_with env e1 in
       let va = eval_with env e2 in
       begin match vf with
-      | VClos clos ->
-          let env' = Env.add clos.arg va clos.env in
-          eval_with env' clos.body
-      | _ -> failwith "apply non-function"
+      | VClos { arg; body; env = clos_env; name } ->
+          (* 递归函数：在闭包环境里加入 self 绑定 *)
+          let base_env =
+            match name with
+            | None -> clos_env
+            | Some f_name -> Env.add f_name vf clos_env
+          in
+          let env' = Env.add arg va base_env in
+          eval_with env' body
+      | _ ->
+          failwith "apply non-function"
       end
 
-  | Let { is_rec = _; name; ty = _; binding; body } ->
-      (* runtime: let 和 let rec 行为相同（已由 typechecker 保证安全） *)
-      let v = eval_with env binding in
-      eval_with (Env.add name v env) body
+  | Let { is_rec; name; ty = _; binding; body } ->
+      if not is_rec then (
+        (* 非递归 let：正常环境扩展 *)
+        let v = eval_with env binding in
+        let env' = Env.add name v env in
+        eval_with env' body
+      ) else (
+        (* 递归 let：binding 必须是函数（由 type_of 保证） *)
+        match binding with
+        | Fun (arg, _arg_ty, fun_body) ->
+            (* 闭包捕获当前 env，并记录名字用于递归；
+               真正 self 绑定在 App 里通过 name 实现。 *)
+            let clos = VClos { arg; body = fun_body; env; name = Some name } in
+            let env' = Env.add name clos env in
+            eval_with env' body
+        | _ ->
+            (* 理论上不会发生；保底回退到非递归语义。 *)
+            let v = eval_with env binding in
+            let env' = Env.add name v env in
+            eval_with env' body
+      )
 
   | Assert e1 ->
       if bool_of_value (eval_with env e1) then VUnit
@@ -358,6 +376,7 @@ let rec eval_with env e =
            | VBool true -> VBool true
            | VBool false -> VBool (bool_of_value (eval_with env e2))
            | _ -> failwith "|| expects bool")
+
       | Add | Sub | Mul | Div | Mod ->
           let n1 = int_of_value (eval_with env e1) in
           let n2 = int_of_value (eval_with env e2) in
@@ -371,10 +390,12 @@ let rec eval_with env e =
               if n2 = 0 then raise DivByZero else VNum (n1 mod n2)
           | _ -> assert false
           end
+
       | Lt | Lte | Gt | Gte ->
           let n1 = int_of_value (eval_with env e1) in
           let n2 = int_of_value (eval_with env e2) in
-          let b = match op with
+          let b =
+            match op with
             | Lt  -> n1 <  n2
             | Lte -> n1 <= n2
             | Gt  -> n1 >  n2
@@ -382,6 +403,7 @@ let rec eval_with env e =
             | _ -> assert false
           in
           VBool b
+
       | Eq | Neq ->
           let v1 = eval_with env e1 in
           let v2 = eval_with env e2 in
@@ -395,9 +417,14 @@ let rec eval_with env e =
           VBool (if op = Eq then eq else not eq)
       end
 
-let eval e = eval_with Env.empty e
+let eval (e : expr) : value =
+  eval_with Env.empty e
 
-let interp s =
+(******************************************************************
+ * Top-level interp
+ ******************************************************************)
+
+let interp (s : string) : (value, error) result =
   match parse s with
   | None -> Error ParseErr
   | Some p ->
