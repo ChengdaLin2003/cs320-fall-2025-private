@@ -1,6 +1,6 @@
 open Utils
-
 module Env = Utils.Env
+exception DivByZero = Division_by_zero
 
 (******************************************************************
  * 重新导出 ty / error / sfexpr / toplet / prog / expr / value 类型，
