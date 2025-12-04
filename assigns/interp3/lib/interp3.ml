@@ -14,9 +14,6 @@ type subst = ty Env.t
 
 let empty_subst : subst = Env.empty
 
-let subst_single (x : ident) (t : ty) : subst =
-  Env.add x t Env.empty
-
 let lookup_subst (x : ident) (s : subst) : ty option =
   try Some (Env.find x s) with Not_found -> None
 
@@ -100,7 +97,7 @@ let principle_type (ty : ty) (cs : constr list) : ty_scheme option =
       let vars = free_ty_vars ty' in
       Some (Forall (vars, ty'))
 
-(* -------------- stubs for the rest (can stay unimplemented) -------------- *)
+(* -------------- stubs for the rest (可以保持未实现，只要不被测试调用) -------------- *)
 
 let type_of (_ctxt : stc_env) (_e : expr) : ty_scheme option = assert false
 
