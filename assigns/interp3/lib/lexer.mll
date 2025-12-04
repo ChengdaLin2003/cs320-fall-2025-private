@@ -61,11 +61,12 @@ rule read =
   | int { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | float { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   | var { VAR (Lexing.lexeme lexbuf) }
-  | var { VAR (Lexing.lexeme lexbuf) }
+  | tvar { VAR (Lexing.lexeme lexbuf) }
   | whitespace { read lexbuf }
   | eof { EOF }
   | "(*" { read_comment 0 lexbuf }
   | _ { failwith ("Unknown token: " ^ Lexing.lexeme lexbuf) }
+
 and read_comment depth =
   parse
   | "(*" { read_comment (depth + 1) lexbuf }
