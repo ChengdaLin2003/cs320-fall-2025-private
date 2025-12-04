@@ -17,13 +17,13 @@ let empty_subst : subst = Env.empty
 let lookup_subst (x : ident) (s : subst) : ty option =
   try Some (Env.find x s) with Not_found -> None
 
-(* apply substitution to a type *)
+(* apply substitution to a type, fully closing nested substitutions *)
 let rec apply_subst_ty (s : subst) (t : ty) : ty =
   match t with
   | TUnit | TInt | TFloat | TBool -> t
   | TVar a ->
       begin match lookup_subst a s with
-      | Some t' -> t'
+      | Some t' -> apply_subst_ty s t'      (* 关键修改：递归再替换一次 *)
       | None -> t
       end
   | TList t1 -> TList (apply_subst_ty s t1)
@@ -83,6 +83,7 @@ let rec unify (s : subst) (cs : constr list) : subst option =
             None
           else
             (* extend substitution and continue *)
+            let t = apply_subst_ty s t in   (* 可选：先正规化一下 t *)
             let s' = Env.add x t s in
             unify s' rest
 
@@ -97,7 +98,7 @@ let principle_type (ty : ty) (cs : constr list) : ty_scheme option =
       let vars = free_ty_vars ty' in
       Some (Forall (vars, ty'))
 
-(* -------------- stubs for the rest (可以保持未实现，只要不被测试调用) -------------- *)
+(* -------------- stubs for the rest -------------- *)
 
 let type_of (_ctxt : stc_env) (_e : expr) : ty_scheme option = assert false
 
