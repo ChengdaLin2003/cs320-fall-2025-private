@@ -61,7 +61,8 @@ rule read =
   | int { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | float { FLOAT (float_of_string (Lexing.lexeme lexbuf)) }
   | var { VAR (Lexing.lexeme lexbuf) }
-  | tvar { TVAR (Lexing.lexeme lexbuf) }
+  | var { VAR (Lexing.lexeme lexbuf) }
+  | tvar { VAR (Lexing.lexeme lexbuf) }
   | whitespace { read lexbuf }
   | eof { EOF }
   | "(*" { read_comment 0 lexbuf }
