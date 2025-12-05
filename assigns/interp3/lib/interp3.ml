@@ -1,15 +1,20 @@
+(* Bring in all AST types and utility definitions *)
 include Utils
 
-(* -------------- parsing -------------- *)
-
+(* -------------------- Parsing -------------------- *)
+(** [parse s] turns string [s] into a program AST (prog option).
+    和 interp1 一样：解析成功返回 [Some prog]，任何词法/语法错误都返回 [None]. *)
 let parse (s : string) : prog option =
-  match Parser.prog Lexer.read (Lexing.from_string s) with
-  | prog -> Some prog
-  | exception _ -> None
+  try
+    let lexbuf = Lexing.from_string s in
+    Some (Parser.prog Lexer.read lexbuf)
+  with _ -> None
 
-(* -------------- principal type -------------- *)
+(* -------------------------------- *)
+(* Substitutions and unification    *)
+(* -------------------------------- *)
 
-(* substitution: maps type variables to types *)
+(* A substitution maps type variables (ident) to types. *)
 type subst = ty Env.t
 
 let empty_subst : subst = Env.empty
@@ -23,7 +28,7 @@ let rec apply_subst_ty (s : subst) (t : ty) : ty =
   | TUnit | TInt | TFloat | TBool -> t
   | TVar a ->
       begin match lookup_subst a s with
-      | Some t' -> apply_subst_ty s t'      (* 关键修改：递归再替换一次 *)
+      | Some t' -> apply_subst_ty s t'      (* 关键：再递归一层，处理嵌套替换 *)
       | None -> t
       end
   | TList t1 -> TList (apply_subst_ty s t1)
@@ -52,6 +57,7 @@ let rec unify (s : subst) (cs : constr list) : subst option =
   match cs with
   | [] -> Some s
   | (t1, t2) :: rest ->
+      (* 始终先应用当前 substitution 正规化，再做模式匹配 *)
       let t1 = apply_subst_ty s t1 in
       let t2 = apply_subst_ty s t2 in
       match t1, t2 with
@@ -83,12 +89,14 @@ let rec unify (s : subst) (cs : constr list) : subst option =
             None
           else
             (* extend substitution and continue *)
-            let t = apply_subst_ty s t in   (* 可选：先正规化一下 t *)
+            let t = apply_subst_ty s t in
             let s' = Env.add x t s in
             unify s' rest
 
       (* all other combinations are incompatible *)
       | _, _ -> None
+
+(* ---------------- principal_type ---------------- *)
 
 let principle_type (ty : ty) (cs : constr list) : ty_scheme option =
   match unify empty_subst cs with
@@ -98,32 +106,38 @@ let principle_type (ty : ty) (cs : constr list) : ty_scheme option =
       let vars = free_ty_vars ty' in
       Some (Forall (vars, ty'))
 
-(* -------------- stubs for the rest -------------- *)
+(* ---------------- stubs for the rest ---------------- *)
 
-let type_of (_ctxt : stc_env) (_e : expr) : ty_scheme option = assert false
+let type_of (_ctxt : stc_env) (_e : expr) : ty_scheme option =
+  assert false
 
-let is_well_typed (_p : prog) : bool = assert false
+let is_well_typed (_p : prog) : bool =
+  assert false
 
 exception AssertFail
 exception DivByZero
 exception CompareFunVals
 
-let eval_expr (_env : dyn_env) (_e : expr) : value = assert false
+let eval_expr (_env : dyn_env) (_e : expr) : value =
+  assert false
 
-let eval p =
+let eval (p : prog) : value =
+  (* 把 toplet list 嵌成一个大 Let 表达式，再交给 eval_expr *)
   let rec nest = function
     | [] -> Unit
-    | [{is_rec; name; binding}] ->
+    | [{ is_rec; name; binding }] ->
         Let { is_rec; name; binding; body = Var name }
-    | {is_rec; name; binding} :: ls ->
-        Let { is_rec; name; binding; body = nest ls }
+    | { is_rec; name; binding } :: rest ->
+        Let { is_rec; name; binding; body = nest rest }
   in
-  eval_expr Env.empty (nest p)
+  let e = nest p in
+  eval_expr Env.empty e
 
-let interp input =
+let interp (input : string) : (value, error) result =
   match parse input with
   | Some prog ->
-      if is_well_typed prog
-      then Ok (eval prog)
-      else Error TypeError
+      if is_well_typed prog then
+        Ok (eval prog)
+      else
+        Error TypeError
   | None -> Error ParseError
