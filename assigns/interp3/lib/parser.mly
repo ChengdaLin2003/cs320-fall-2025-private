@@ -225,14 +225,15 @@ list_item:
   | SEMICOLON; e=expr { e }
 
 expr3:
-  | LPAREN; RPAREN             { Unit }
-  | LPAREN; e=expr; RPAREN     { e }
-  | TRUE                       { Bool true }
-  | FALSE                      { Bool false }
-  | NONE                       { ENone }
-  | LBRACKET; RBRACKET         { Nil }
+  | LPAREN; RPAREN                   { Unit }
+  | LPAREN; e=expr; RPAREN           { e }
+  | LPAREN; e=expr; a=annot; RPAREN  { Annot (e, a) }
+  | TRUE                             { Bool true }
+  | FALSE                            { Bool false }
+  | NONE                             { ENone }
+  | LBRACKET; RBRACKET               { Nil }
   | LBRACKET; e=expr; es=list_item*; RBRACKET
     { mk_list e es }
-  | n=INT                      { Int n }
-  | n=FLOAT                    { Float n }
-  | x=VAR                      { Var x }
+  | n=INT                            { Int n }
+  | n=FLOAT                          { Float n }
+  | x=VAR                            { Var x }
