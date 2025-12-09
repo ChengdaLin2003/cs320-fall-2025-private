@@ -74,9 +74,11 @@ let rec unify (s : subst) (cs : constr list) : subst option =
           if occurs x t then
             None
           else
-            (* Update substitution: x |-> t, and apply this to existing range *)
+            (* Robust update: x |-> t *)
             let s_new_mapping = Env.singleton x t in
+            (* Apply new mapping to the existing substitution's range *)
             let s_updated = Env.map (apply_subst_ty s_new_mapping) s in
+            (* Combine them, preferring the new update if collision (shouldn't happen for valid unification) *)
             let final_s = Env.add x t s_updated in
             unify final_s rest
             
@@ -203,7 +205,6 @@ let rec infer (env : stc_env) (e : expr) : ty * constr list =
       let (tc, cc) = infer env' case in
       (tc, (tm, TPair (t1, t2)) :: cm @ cc)
 
-
 let type_of (env : stc_env) (e : expr) : ty_scheme option =
   try
     let (ty, cs) = infer env e in
@@ -220,9 +221,12 @@ let is_well_typed (p : prog) : bool =
           if is_rec then
              let alpha = TVar (Utils.gensym ()) in
              let env_rec = Env.add name (Forall (VarSet.empty, alpha)) env in
-             match type_of env_rec binding with
-             | Some sch -> Some sch
-             | None -> None
+             (* Fix: Must infer binding and UNIFY it with alpha *)
+             try 
+               let (tbind, cbind) = infer env_rec binding in
+               let cs = (alpha, tbind) :: cbind in
+               principle_type tbind cs
+             with _ -> None
           else
              type_of env binding
         in
@@ -339,6 +343,8 @@ let rec eval_expr (env : dyn_env) (e : expr) : value =
            | MulF -> VFloat (float_of_val v1 *. float_of_val v2)
            | DivF -> VFloat (float_of_val v1 /. float_of_val v2)
            | PowF -> VFloat (float_of_val v1 ** float_of_val v2)
+           
+           (* Polymorphic comparisons requiring Extra Credit check *)
            | Lt -> 
                check_fun_val v1; check_fun_val v2;
                VBool (v1 < v2)
@@ -357,6 +363,7 @@ let rec eval_expr (env : dyn_env) (e : expr) : value =
            | Neq -> 
                check_fun_val v1; check_fun_val v2;
                VBool (v1 <> v2)
+           
            | Comma -> VPair (v1, v2)
            | Cons -> 
                (match v2 with
