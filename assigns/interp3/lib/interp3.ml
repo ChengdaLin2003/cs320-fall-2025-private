@@ -59,13 +59,8 @@ let rec unify (s : subst) (cs : constr list) : subst option =
   | (t1, t2) :: rest ->
       let t1 = apply_subst_ty s t1 in
       let t2 = apply_subst_ty s t2 in
+      if t1 = t2 then unify s rest else
       match t1, t2 with
-      | TUnit, TUnit
-      | TInt, TInt
-      | TFloat, TFloat
-      | TBool, TBool ->
-          unify s rest
-
       | TList a, TList b
       | TOption a, TOption b ->
           unify s ((a, b) :: rest)
@@ -76,16 +71,15 @@ let rec unify (s : subst) (cs : constr list) : subst option =
 
       | TVar x, t
       | t, TVar x ->
-          if t = TVar x then
-            unify s rest
-          else if occurs x t then
+          if occurs x t then
             None
           else
-            let s' = Env.add x t s in 
-            (* Apply new substitution to existing substitution range *)
-            let s_updated = Env.map (apply_subst_ty s') s in 
-            let final_s = Env.union (fun _ v1 _ -> Some v1) s_updated s' in
+            (* Update substitution: x |-> t, and apply this to existing range *)
+            let s_new_mapping = Env.singleton x t in
+            let s_updated = Env.map (apply_subst_ty s_new_mapping) s in
+            let final_s = Env.add x t s_updated in
             unify final_s rest
+            
       | _, _ -> None
 
 let principle_type (ty : ty) (cs : constr list) : ty_scheme option =
@@ -146,7 +140,7 @@ let rec infer (env : stc_env) (e : expr) : ty * constr list =
         match op with
         | Add | Sub | Mul | Div | Mod -> (TInt, [(t1, TInt); (t2, TInt)])
         | AddF | SubF | MulF | DivF | PowF -> (TFloat, [(t1, TFloat); (t2, TFloat)])
-        | Lt | Lte | Gt | Gte -> (TBool, [(t1, t2)]) (* Polymorphic comparison *)
+        | Lt | Lte | Gt | Gte -> (TBool, [(t1, t2)]) 
         | Eq | Neq -> (TBool, [(t1, t2)])
         | And | Or -> (TBool, [(t1, TBool); (t2, TBool)])
         | Comma -> (TPair (t1, t2), [])
@@ -208,8 +202,6 @@ let rec infer (env : stc_env) (e : expr) : ty * constr list =
       in
       let (tc, cc) = infer env' case in
       (tc, (tm, TPair (t1, t2)) :: cm @ cc)
-  
-  (* 已移除冗余的通配符匹配 *)
 
 
 let type_of (env : stc_env) (e : expr) : ty_scheme option =
@@ -253,6 +245,15 @@ exception CompareFunVals
 let int_of_val = function VInt i -> i | _ -> failwith "Expected int"
 let bool_of_val = function VBool b -> b | _ -> failwith "Expected bool"
 let float_of_val = function VFloat f -> f | _ -> failwith "Expected float"
+
+(* Helper to check for function values in polymorphic comparisons (Extra Credit) *)
+let rec check_fun_val (v : value) : unit =
+  match v with
+  | VClos _ -> raise CompareFunVals
+  | VPair (v1, v2) -> check_fun_val v1; check_fun_val v2
+  | VList l -> List.iter check_fun_val l
+  | VSome v1 -> check_fun_val v1
+  | _ -> ()
 
 let rec eval_expr (env : dyn_env) (e : expr) : value =
   match e with
@@ -338,12 +339,24 @@ let rec eval_expr (env : dyn_env) (e : expr) : value =
            | MulF -> VFloat (float_of_val v1 *. float_of_val v2)
            | DivF -> VFloat (float_of_val v1 /. float_of_val v2)
            | PowF -> VFloat (float_of_val v1 ** float_of_val v2)
-           | Lt -> VBool (v1 < v2)
-           | Lte -> VBool (v1 <= v2)
-           | Gt -> VBool (v1 > v2)
-           | Gte -> VBool (v1 >= v2)
-           | Eq -> VBool (v1 = v2)
-           | Neq -> VBool (v1 <> v2)
+           | Lt -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 < v2)
+           | Lte -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 <= v2)
+           | Gt -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 > v2)
+           | Gte -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 >= v2)
+           | Eq -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 = v2)
+           | Neq -> 
+               check_fun_val v1; check_fun_val v2;
+               VBool (v1 <> v2)
            | Comma -> VPair (v1, v2)
            | Cons -> 
                (match v2 with
