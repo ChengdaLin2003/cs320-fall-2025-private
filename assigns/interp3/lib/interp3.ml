@@ -209,7 +209,7 @@ let rec infer (env : stc_env) (e : expr) : ty * constr list =
       let (tc, cc) = infer env' case in
       (tc, (tm, TPair (t1, t2)) :: cm @ cc)
   
-  | _ -> failwith "Feature not implemented in type inference"
+  (* 已移除冗余的通配符匹配 *)
 
 
 let type_of (env : stc_env) (e : expr) : ty_scheme option =
